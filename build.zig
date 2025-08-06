@@ -33,7 +33,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("lib/lexer/lexer.zig"),
         .target = target,
     });
-    const token_mod = b.addModule("token", .{
+    const token_mod = b.createModule(.{
         .root_source_file = b.path("lib/token/token.zig"),
         .target = target,
     });
@@ -75,8 +75,8 @@ pub fn build(b: *std.Build) void {
                 // repeated because you are allowed to rename your imports, which
                 // can be extremely useful in case of collisions (which can happen
                 // importing modules from different packages).
-                .{ .name = "lexer", .module = lexer_mod },
                 .{ .name = "token", .module = token_mod },
+                .{ .name = "lexer", .module = lexer_mod },
             },
         }),
     });
@@ -116,12 +116,12 @@ pub fn build(b: *std.Build) void {
     // Creates an executable that will run `test` blocks from the provided module.
     // Here `mod` needs to define a target, which is why earlier we made sure to
     // set the releative field.
-    const mod_tests = b.addTest(.{
-        .root_module = lexer_mod,
-    });
+    const lexer_tests = b.addTest(.{ .root_module = b.createModule(.{ .root_source_file = b.path("lib/lexer/lexer.zig"), .target = target, .imports = &.{
+        .{ .name = "token", .module = token_mod },
+    } }) });
 
     // A run step that will run the test executable.
-    const run_mod_tests = b.addRunArtifact(mod_tests);
+    const run_lexer_tests = b.addRunArtifact(lexer_tests);
 
     // Creates an executable that will run `test` blocks from the executable's
     // root module. Note that test executables only test one module at a time,
@@ -137,7 +137,7 @@ pub fn build(b: *std.Build) void {
     // times and since the two run steps do not depend on one another, this will
     // make the two of them run in parallel.
     const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&run_mod_tests.step);
+    test_step.dependOn(&run_lexer_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
