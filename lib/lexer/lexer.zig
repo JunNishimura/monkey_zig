@@ -4,7 +4,7 @@ const tok = @import("token");
 const TokenType = tok.TokenType;
 const Token = tok.Token;
 
-const Lexer = struct {
+pub const Lexer = struct {
     input: []const u8,
     position: usize,
     read_position: usize,
