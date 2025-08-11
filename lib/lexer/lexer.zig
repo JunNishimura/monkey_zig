@@ -78,6 +78,24 @@ const Lexer = struct {
             '+' => {
                 token = new_token(.Plus, "+");
             },
+            '-' => {
+                token = new_token(.Minus, "-");
+            },
+            '!' => {
+                token = new_token(.Bang, "!");
+            },
+            '/' => {
+                token = new_token(.Slash, "/");
+            },
+            '*' => {
+                token = new_token(.Asterisk, "*");
+            },
+            '<' => {
+                token = new_token(.LessThan, "<");
+            },
+            '>' => {
+                token = new_token(.GreaterThan, ">");
+            },
             '{' => {
                 token = new_token(.LBrace, "{");
             },
@@ -129,6 +147,8 @@ test "test next token" {
         \\};
         \\
         \\let result = add(five, ten);
+        \\!-/*5;
+        \\5 < 10 > 5;
     ;
 
     const expected = [_]struct {
@@ -169,6 +189,18 @@ test "test next token" {
         .{ .expected_type = .Comma, .expected_literal = "," },
         .{ .expected_type = .Ident, .expected_literal = "ten" },
         .{ .expected_type = .RParen, .expected_literal = ")" },
+        .{ .expected_type = .Semicolon, .expected_literal = ";" },
+        .{ .expected_type = .Bang, .expected_literal = "!" },
+        .{ .expected_type = .Minus, .expected_literal = "-" },
+        .{ .expected_type = .Slash, .expected_literal = "/" },
+        .{ .expected_type = .Asterisk, .expected_literal = "*" },
+        .{ .expected_type = .Int, .expected_literal = "5" },
+        .{ .expected_type = .Semicolon, .expected_literal = ";" },
+        .{ .expected_type = .Int, .expected_literal = "5" },
+        .{ .expected_type = .LessThan, .expected_literal = "<" },
+        .{ .expected_type = .Int, .expected_literal = "10" },
+        .{ .expected_type = .GreaterThan, .expected_literal = ">" },
+        .{ .expected_type = .Int, .expected_literal = "5" },
         .{ .expected_type = .Semicolon, .expected_literal = ";" },
         .{ .expected_type = .Eof, .expected_literal = "" },
     };

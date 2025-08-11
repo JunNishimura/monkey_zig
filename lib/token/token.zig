@@ -9,6 +9,13 @@ pub const TokenType = enum {
 
     Assign,
     Plus,
+    Minus,
+    Bang,
+    Asterisk,
+    Slash,
+
+    LessThan,
+    GreaterThan,
 
     Comma,
     Semicolon,
