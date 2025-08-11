@@ -149,6 +149,12 @@ test "test next token" {
         \\let result = add(five, ten);
         \\!-/*5;
         \\5 < 10 > 5;
+        \\
+        \\if (5 < 10) {
+        \\    return true;
+        \\} else {
+        \\    return false;
+        \\}
     ;
 
     const expected = [_]struct {
@@ -202,6 +208,23 @@ test "test next token" {
         .{ .expected_type = .GreaterThan, .expected_literal = ">" },
         .{ .expected_type = .Int, .expected_literal = "5" },
         .{ .expected_type = .Semicolon, .expected_literal = ";" },
+        .{ .expected_type = .If, .expected_literal = "if" },
+        .{ .expected_type = .LParen, .expected_literal = "(" },
+        .{ .expected_type = .Int, .expected_literal = "5" },
+        .{ .expected_type = .LessThan, .expected_literal = "<" },
+        .{ .expected_type = .Int, .expected_literal = "10" },
+        .{ .expected_type = .RParen, .expected_literal = ")" },
+        .{ .expected_type = .LBrace, .expected_literal = "{" },
+        .{ .expected_type = .Return, .expected_literal = "return" },
+        .{ .expected_type = .True, .expected_literal = "true" },
+        .{ .expected_type = .Semicolon, .expected_literal = ";" },
+        .{ .expected_type = .RBrace, .expected_literal = "}" },
+        .{ .expected_type = .Else, .expected_literal = "else" },
+        .{ .expected_type = .LBrace, .expected_literal = "{" },
+        .{ .expected_type = .Return, .expected_literal = "return" },
+        .{ .expected_type = .False, .expected_literal = "false" },
+        .{ .expected_type = .Semicolon, .expected_literal = ";" },
+        .{ .expected_type = .RBrace, .expected_literal = "}" },
         .{ .expected_type = .Eof, .expected_literal = "" },
     };
 
