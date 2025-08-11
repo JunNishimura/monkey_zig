@@ -29,13 +29,19 @@ pub fn build(b: *std.Build) void {
     // to our consumers. We must give it a name because a Zig package can expose
     // multiple modules and consumers will need to be able to specify which
     // module they want to access.
-    const lexer_mod = b.addModule("lexer", .{
-        .root_source_file = b.path("lib/lexer/lexer.zig"),
-        .target = target,
-    });
     const token_mod = b.createModule(.{
         .root_source_file = b.path("lib/token/token.zig"),
         .target = target,
+    });
+    const lexer_mod = b.addModule("lexer", .{
+        .root_source_file = b.path("lib/lexer/lexer.zig"),
+        .target = target,
+        .imports = &.{.{ .name = "token", .module = token_mod }},
+    });
+    const repl_mod = b.createModule(.{
+        .root_source_file = b.path("lib/repl/repl.zig"),
+        .target = target,
+        .imports = &.{.{ .name = "lexer", .module = lexer_mod }},
     });
 
     // Here we define an executable. An executable needs to have a root module
@@ -77,6 +83,7 @@ pub fn build(b: *std.Build) void {
                 // importing modules from different packages).
                 .{ .name = "token", .module = token_mod },
                 .{ .name = "lexer", .module = lexer_mod },
+                .{ .name = "repl", .module = repl_mod },
             },
         }),
     });
@@ -116,9 +123,13 @@ pub fn build(b: *std.Build) void {
     // Creates an executable that will run `test` blocks from the provided module.
     // Here `mod` needs to define a target, which is why earlier we made sure to
     // set the releative field.
-    const lexer_tests = b.addTest(.{ .root_module = b.createModule(.{ .root_source_file = b.path("lib/lexer/lexer.zig"), .target = target, .imports = &.{
-        .{ .name = "token", .module = token_mod },
-    } }) });
+    const lexer_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("lib/lexer/lexer.zig"),
+        .target = target,
+        .imports = &.{
+            .{ .name = "token", .module = token_mod },
+        },
+    }) });
 
     // A run step that will run the test executable.
     const run_lexer_tests = b.addRunArtifact(lexer_tests);
