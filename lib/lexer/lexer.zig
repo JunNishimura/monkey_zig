@@ -32,6 +32,13 @@ const Lexer = struct {
         self.read_position += 1;
     }
 
+    fn peek_char(self: *Lexer) u8 {
+        if (self.read_position >= self.input.len) {
+            return 0;
+        }
+        return self.input[self.read_position];
+    }
+
     fn read_identifier(self: *Lexer) []const u8 {
         const start_position = self.position;
         while (is_letter(self.ch)) {
@@ -61,7 +68,12 @@ const Lexer = struct {
 
         switch (self.ch) {
             '=' => {
-                token = new_token(.Assign, "=");
+                if (self.peek_char() == '=') {
+                    self.read_char();
+                    token = new_token(.Eq, "==");
+                } else {
+                    token = new_token(.Assign, "=");
+                }
             },
             ';' => {
                 token = new_token(.Semicolon, ";");
@@ -82,7 +94,12 @@ const Lexer = struct {
                 token = new_token(.Minus, "-");
             },
             '!' => {
-                token = new_token(.Bang, "!");
+                if (self.peek_char() == '=') {
+                    self.read_char();
+                    token = new_token(.NotEq, "!=");
+                } else {
+                    token = new_token(.Bang, "!");
+                }
             },
             '/' => {
                 token = new_token(.Slash, "/");
@@ -155,6 +172,9 @@ test "test next token" {
         \\} else {
         \\    return false;
         \\}
+        \\
+        \\10 == 10;
+        \\10 != 9;
     ;
 
     const expected = [_]struct {
@@ -225,6 +245,14 @@ test "test next token" {
         .{ .expected_type = .False, .expected_literal = "false" },
         .{ .expected_type = .Semicolon, .expected_literal = ";" },
         .{ .expected_type = .RBrace, .expected_literal = "}" },
+        .{ .expected_type = .Int, .expected_literal = "10" },
+        .{ .expected_type = .Eq, .expected_literal = "==" },
+        .{ .expected_type = .Int, .expected_literal = "10" },
+        .{ .expected_type = .Semicolon, .expected_literal = ";" },
+        .{ .expected_type = .Int, .expected_literal = "10" },
+        .{ .expected_type = .NotEq, .expected_literal = "!=" },
+        .{ .expected_type = .Int, .expected_literal = "9" },
+        .{ .expected_type = .Semicolon, .expected_literal = ";" },
         .{ .expected_type = .Eof, .expected_literal = "" },
     };
 

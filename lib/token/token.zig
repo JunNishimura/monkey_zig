@@ -17,6 +17,9 @@ pub const TokenType = enum {
     LessThan,
     GreaterThan,
 
+    Eq,
+    NotEq,
+
     Comma,
     Semicolon,
 
