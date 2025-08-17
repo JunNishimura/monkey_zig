@@ -41,6 +41,7 @@ pub fn build(b: *std.Build) void {
     const ast_mod = b.addModule("ast", .{
         .root_source_file = b.path("lib/ast/ast.zig"),
         .target = target,
+        .imports = &.{.{ .name = "token", .module = token_mod }},
     });
     const repl_mod = b.createModule(.{
         .root_source_file = b.path("lib/repl/repl.zig"),
