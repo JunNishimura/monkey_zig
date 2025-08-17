@@ -1,3 +1,4 @@
+const std = @import("std");
 const Token = @import("token").Token;
 
 const Node = struct {
@@ -12,10 +13,15 @@ const Node = struct {
 pub const Statement = struct {
     ptr: *anyopaque,
     statement_node_fn: *const fn (ptr: *anyopaque) void,
+    deinit_fn: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void,
     node: Node,
 
     pub fn statement_node(self: Statement) void {
         self.statement_node_fn(self.ptr);
+    }
+
+    pub fn deinit(self: Statement, allocator: std.mem.Allocator) void {
+        self.deinit_fn(self.ptr, allocator);
     }
 
     pub fn token_literal(self: Statement) []const u8 {
@@ -37,7 +43,7 @@ const Expression = struct {
 };
 
 pub const Program = struct {
-    statements: []Statement,
+    statements: std.ArrayList(Statement),
 
     fn token_literal(self: *Program) []const u8 {
         if (self.statements.len > 0) {
@@ -45,24 +51,62 @@ pub const Program = struct {
         }
         return "";
     }
+
+    pub fn init(allocator: std.mem.Allocator) !*Program {
+        const p = try allocator.create(Program);
+        const stmts = std.ArrayList(Statement).init(allocator);
+        p.* = .{
+            .statements = stmts,
+        };
+        return p;
+    }
+
+    pub fn deinit(self: *Program, allocator: std.mem.Allocator) void {
+        for (self.statements.items) |stmt| {
+            stmt.deinit(allocator);
+        }
+        self.statements.deinit();
+        allocator.destroy(self);
+    }
 };
 
 pub const LetStatement = struct {
     token: Token,
-    name: *Identifier,
-    value: Expression,
+    name: ?*Identifier,
+    value: ?Expression,
 
-    fn token_literal(self: LetStatement) []const u8 {
+    fn token_literal(ptr: *anyopaque) []const u8 {
+        const self: *LetStatement = @ptrCast(@alignCast(ptr));
         return self.token.literal;
     }
-    fn statement_node(_: LetStatement) void {}
+    fn statement_node(_: *anyopaque) void {}
 
-    fn statement(self: *LetStatement) Statement {
+    pub fn statement(self: *LetStatement) Statement {
         return .{
             .ptr = self,
             .statement_node_fn = statement_node,
+            .deinit_fn = deinit,
             .node = .{ .ptr = self, .token_literal_fn = token_literal },
         };
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token) !*LetStatement {
+        const stmt = try allocator.create(LetStatement);
+        stmt.* = .{
+            .token = token,
+            .name = null,
+            .value = null,
+        };
+        return stmt;
+    }
+
+    pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
+        const self: *LetStatement = @ptrCast(@alignCast(ptr));
+
+        if (self.name) |n| {
+            allocator.destroy(n);
+        }
+        allocator.destroy(self);
     }
 };
 
@@ -74,4 +118,13 @@ pub const Identifier = struct {
         return self.token.literal;
     }
     fn expression_node(_: *Identifier) void {}
+
+    pub fn init(allocator: std.mem.Allocator, token: Token, value: []const u8) !*Identifier {
+        const ident = try allocator.create(Identifier);
+        ident.* = .{
+            .token = token,
+            .value = value,
+        };
+        return ident;
+    }
 };
