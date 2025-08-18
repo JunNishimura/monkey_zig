@@ -8,6 +8,7 @@ const Parser = struct {
     l: *lexer.Lexer,
     cur_token: tok.Token,
     peek_token: tok.Token,
+    errors: std.ArrayList([]u8),
 
     fn init(allocator: std.mem.Allocator, l: *lexer.Lexer) !*Parser {
         var p = try allocator.create(Parser);
@@ -15,10 +16,19 @@ const Parser = struct {
             .l = l,
             .cur_token = .{ .type = .Illegal, .literal = "" },
             .peek_token = .{ .type = .Illegal, .literal = "" },
+            .errors = std.ArrayList([]u8).init(allocator),
         };
         p.next_token();
         p.next_token();
         return p;
+    }
+
+    fn deinit(self: *Parser, allocator: std.mem.Allocator) void {
+        for (self.errors.items) |err| {
+            allocator.free(err);
+        }
+        self.errors.deinit();
+        allocator.destroy(self);
     }
 
     fn next_token(self: *Parser) void {
@@ -30,11 +40,12 @@ const Parser = struct {
         return self.peek_token.type == token_type;
     }
 
-    fn expect_peek(self: *Parser, token_type: tok.TokenType) bool {
+    fn expect_peek(self: *Parser, allocator: std.mem.Allocator, token_type: tok.TokenType) !bool {
         if (self.peek_token_is(token_type)) {
             self.next_token();
             return true;
         }
+        try self.peek_error(allocator, token_type);
         return false;
     }
 
@@ -45,13 +56,15 @@ const Parser = struct {
     fn parse_let_statement(self: *Parser, allocator: std.mem.Allocator) !?*ast.LetStatement {
         const let_stmt = try ast.LetStatement.init(allocator, self.cur_token);
 
-        if (!self.expect_peek(.Ident)) {
+        const is_ident = try self.expect_peek(allocator, .Ident);
+        if (!is_ident) {
             return null;
         }
 
         let_stmt.name = try ast.Identifier.init(allocator, self.cur_token, self.cur_token.literal);
 
-        if (!self.expect_peek(.Assign)) {
+        const is_assign = try self.expect_peek(allocator, .Assign);
+        if (!is_assign) {
             return null;
         }
 
@@ -88,6 +101,18 @@ const Parser = struct {
 
         return program;
     }
+
+    fn peek_error(self: *Parser, allocator: std.mem.Allocator, token_type: tok.TokenType) !void {
+        const msg = try std.fmt.allocPrint(
+            allocator,
+            "expected next token to be {any}, got {any} instead",
+            .{
+                token_type,
+                self.peek_token.type,
+            },
+        );
+        try self.errors.append(msg);
+    }
 };
 
 test "test let statements" {
@@ -103,9 +128,10 @@ test "test let statements" {
     defer allocator.destroy(l);
 
     const p = try Parser.init(allocator, l);
-    defer allocator.destroy(p);
+    defer p.deinit(allocator);
 
     const program = try p.parse_program(allocator);
+    check_parser_errors(p);
     defer program.deinit(allocator);
 
     try testing.expect(program.statements.items.len == 3);
@@ -121,6 +147,21 @@ test "test let statements" {
     for (program.statements.items, expected) |stmt, exp| {
         try testing.expect(test_let_statement(stmt, exp.identifier));
     }
+}
+
+fn check_parser_errors(parser: *Parser) void {
+    const errors = parser.errors;
+    if (errors.items.len == 0) {
+        return;
+    }
+
+    std.log.err("parser has {d} errors:", .{errors.items.len});
+    for (errors.items) |err| {
+        std.log.err("parser error: {s}", .{err});
+    }
+
+    // exit process
+    std.process.exit(1);
 }
 
 fn test_let_statement(s: ast.Statement, name: []const u8) bool {
