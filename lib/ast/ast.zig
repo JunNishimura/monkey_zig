@@ -5,6 +5,23 @@ const Node = struct {
     ptr: *anyopaque,
     token_literal_fn: *const fn (ptr: *anyopaque) []const u8,
 
+    pub fn init(ptr: anytype) Node {
+        const T = @TypeOf(ptr);
+        const ptr_info = @typeInfo(T);
+
+        const gen = struct {
+            pub fn token_literal(pointer: *anyopaque) []const u8 {
+                const self: T = @ptrCast(@alignCast(pointer));
+                return ptr_info.pointer.child.token_literal(self);
+            }
+        };
+
+        return .{
+            .ptr = ptr,
+            .token_literal_fn = gen.token_literal,
+        };
+    }
+
     fn token_literal(self: Node) []const u8 {
         return self.token_literal_fn(self.ptr);
     }
@@ -15,6 +32,30 @@ pub const Statement = struct {
     statement_node_fn: *const fn (ptr: *anyopaque) void,
     deinit_fn: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void,
     node: Node,
+
+    pub fn init(ptr: anytype) Statement {
+        const T = @TypeOf(ptr);
+        const ptr_info = @typeInfo(T);
+
+        const gen = struct {
+            pub fn statement_node(pointer: *anyopaque) void {
+                const self: T = @ptrCast(@alignCast(pointer));
+                return ptr_info.pointer.child.statement_node(self);
+            }
+
+            pub fn deinit(pointer: *anyopaque, allocator: std.mem.Allocator) void {
+                const self: T = @ptrCast(@alignCast(pointer));
+                ptr_info.pointer.child.deinit(self, allocator);
+            }
+        };
+
+        return .{
+            .ptr = ptr,
+            .statement_node_fn = gen.statement_node,
+            .deinit_fn = gen.deinit,
+            .node = Node.init(ptr),
+        };
+    }
 
     pub fn statement_node(self: Statement) void {
         self.statement_node_fn(self.ptr);
@@ -75,19 +116,13 @@ pub const LetStatement = struct {
     name: ?*Identifier,
     value: ?Expression,
 
-    fn token_literal(ptr: *anyopaque) []const u8 {
-        const self: *LetStatement = @ptrCast(@alignCast(ptr));
+    fn token_literal(self: *LetStatement) []const u8 {
         return self.token.literal;
     }
-    fn statement_node(_: *anyopaque) void {}
+    fn statement_node(_: *LetStatement) void {}
 
     pub fn statement(self: *LetStatement) Statement {
-        return .{
-            .ptr = self,
-            .statement_node_fn = statement_node,
-            .deinit_fn = deinit,
-            .node = .{ .ptr = self, .token_literal_fn = token_literal },
-        };
+        return Statement.init(self);
     }
 
     pub fn init(allocator: std.mem.Allocator, token: Token) !*LetStatement {
@@ -100,9 +135,7 @@ pub const LetStatement = struct {
         return stmt;
     }
 
-    pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
-        const self: *LetStatement = @ptrCast(@alignCast(ptr));
-
+    pub fn deinit(self: *LetStatement, allocator: std.mem.Allocator) void {
         if (self.name) |n| {
             allocator.destroy(n);
         }
@@ -114,19 +147,13 @@ pub const ReturnStatement = struct {
     token: Token,
     return_value: Expression,
 
-    pub fn token_literal(ptr: *anyopaque) []const u8 {
-        const self: *ReturnStatement = @ptrCast(@alignCast(ptr));
+    pub fn token_literal(self: *ReturnStatement) []const u8 {
         return self.token.literal;
     }
-    fn statement_node(_: *anyopaque) void {}
+    fn statement_node(_: *ReturnStatement) void {}
 
     pub fn statement(self: *ReturnStatement) Statement {
-        return .{
-            .ptr = self,
-            .statement_node_fn = statement_node,
-            .deinit_fn = deinit,
-            .node = .{ .ptr = self, .token_literal_fn = token_literal },
-        };
+        return Statement.init(self);
     }
 
     pub fn init(allocator: std.mem.Allocator, token: Token) !*ReturnStatement {
@@ -138,8 +165,7 @@ pub const ReturnStatement = struct {
         return stmt;
     }
 
-    pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
-        const self: *ReturnStatement = @ptrCast(@alignCast(ptr));
+    pub fn deinit(self: *ReturnStatement, allocator: std.mem.Allocator) void {
         allocator.destroy(self);
     }
 };
