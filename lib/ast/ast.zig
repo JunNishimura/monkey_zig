@@ -74,6 +74,23 @@ const Expression = struct {
     ptr: *anyopaque,
     expression_node_fn: *const fn (ptr: *anyopaque) void,
 
+    pub fn init(ptr: anytype) Expression {
+        const T = @TypeOf(ptr);
+        const ptr_info = @typeInfo(T);
+
+        const gen = struct {
+            pub fn expression_node(pointer: *anyopaque) void {
+                const self: T = @ptrCast(@alignCast(pointer));
+                return ptr_info.pointer.child.expression_node(self);
+            }
+        };
+
+        return .{
+            .ptr = ptr,
+            .expression_node_fn = gen.expression_node,
+        };
+    }
+
     fn expression_node(self: Expression) void {
         self.expression_node_fn(self.ptr);
     }
@@ -186,5 +203,9 @@ pub const Identifier = struct {
             .value = value,
         };
         return ident;
+    }
+
+    pub fn expression(self: *Identifier) Expression {
+        return Expression.init(self);
     }
 };
