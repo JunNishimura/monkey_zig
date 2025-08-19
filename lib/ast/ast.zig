@@ -110,6 +110,40 @@ pub const LetStatement = struct {
     }
 };
 
+pub const ReturnStatement = struct {
+    token: Token,
+    return_value: Expression,
+
+    pub fn token_literal(ptr: *anyopaque) []const u8 {
+        const self: *ReturnStatement = @ptrCast(@alignCast(ptr));
+        return self.token.literal;
+    }
+    fn statement_node(_: *anyopaque) void {}
+
+    pub fn statement(self: *ReturnStatement) Statement {
+        return .{
+            .ptr = self,
+            .statement_node_fn = statement_node,
+            .deinit_fn = deinit,
+            .node = .{ .ptr = self, .token_literal_fn = token_literal },
+        };
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token) !*ReturnStatement {
+        const stmt = try allocator.create(ReturnStatement);
+        stmt.* = .{
+            .token = token,
+            .return_value = null,
+        };
+        return stmt;
+    }
+
+    pub fn deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
+        const self: *ReturnStatement = @ptrCast(@alignCast(ptr));
+        allocator.destroy(self);
+    }
+};
+
 pub const Identifier = struct {
     token: Token,
     value: []const u8,
