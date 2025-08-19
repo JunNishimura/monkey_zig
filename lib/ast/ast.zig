@@ -162,7 +162,7 @@ pub const LetStatement = struct {
 
 pub const ReturnStatement = struct {
     token: Token,
-    return_value: Expression,
+    return_value: ?Expression,
 
     pub fn token_literal(self: *ReturnStatement) []const u8 {
         return self.token.literal;

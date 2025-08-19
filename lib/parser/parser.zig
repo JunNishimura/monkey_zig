@@ -75,14 +75,30 @@ const Parser = struct {
         return let_stmt;
     }
 
+    fn parse_return_statement(self: *Parser, allocator: std.mem.Allocator) !*ast.ReturnStatement {
+        const return_stmt = try ast.ReturnStatement.init(allocator, self.cur_token);
+
+        self.next_token();
+
+        while (!self.cur_token_is(.Semicolon)) {
+            self.next_token();
+        }
+
+        return return_stmt;
+    }
+
     fn parse_statement(self: *Parser, allocator: std.mem.Allocator) !?ast.Statement {
         switch (self.cur_token.type) {
-            .Let => return {
+            .Let => {
                 const let_stmt = try self.parse_let_statement(allocator);
                 if (let_stmt) |ls| {
                     return ls.statement();
                 }
                 return null;
+            },
+            .Return => {
+                const return_stmt = try self.parse_return_statement(allocator);
+                return return_stmt.statement();
             },
             else => return null,
         }
@@ -181,4 +197,31 @@ fn test_let_statement(s: ast.Statement, name: []const u8) bool {
         return false;
     }
     return true;
+}
+
+test "test return statement" {
+    const input =
+        \\return 5;
+        \\return 10;
+        \\return 993322;
+    ;
+
+    const allocator = std.testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit(allocator);
+
+    const program = try p.parse_program(allocator);
+    check_parser_errors(p);
+    defer program.deinit(allocator);
+
+    try testing.expect(program.statements.items.len == 3);
+
+    for (program.statements.items) |stmt| {
+        const ret_stmt: *ast.ReturnStatement = @ptrCast(@alignCast(stmt.ptr));
+        try testing.expect(std.mem.eql(u8, ret_stmt.token_literal(), "return"));
+    }
 }
