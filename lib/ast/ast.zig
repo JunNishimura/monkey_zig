@@ -187,6 +187,32 @@ pub const ReturnStatement = struct {
     }
 };
 
+pub const ExpressionStatement = struct {
+    token: Token,
+    expression: Expression,
+
+    fn statement_node(_: *ExpressionStatement) void {}
+    fn token_literal(self: *ExpressionStatement) []const u8 {
+        return self.token.literal;
+    }
+    fn deinit(self: *ExpressionStatement, allocator: std.mem.Allocator) void {
+        allocator.destroy(self);
+    }
+
+    fn statement(self: *ExpressionStatement) Statement {
+        return Statement.init(self);
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token, expression: Expression) !*ExpressionStatement {
+        const stmt = try allocator.create(ExpressionStatement);
+        stmt.* = .{
+            .token = token,
+            .expression = expression,
+        };
+        return stmt;
+    }
+};
+
 pub const Identifier = struct {
     token: Token,
     value: []const u8,
