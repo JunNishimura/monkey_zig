@@ -90,7 +90,7 @@ pub const Statement = struct {
     }
 };
 
-const Expression = struct {
+pub const Expression = struct {
     ptr: *anyopaque,
     expression_node_fn: *const fn (ptr: *anyopaque) void,
     node: Node,

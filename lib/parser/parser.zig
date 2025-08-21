@@ -4,11 +4,16 @@ const lexer = @import("lexer");
 const tok = @import("token");
 const ast = @import("ast");
 
+const PrefixParseFn = fn () ast.Expression;
+const InfixParseFn = fn (ast.Expression) ast.Expression;
+
 const Parser = struct {
     l: *lexer.Lexer,
     cur_token: tok.Token,
     peek_token: tok.Token,
     errors: std.ArrayList([]u8),
+    prefix_parse_fns: std.AutoHashMap(tok.TokenType, PrefixParseFn),
+    infix_parse_fns: std.AutoHashMap(tok.TokenType, InfixParseFn),
 
     fn init(allocator: std.mem.Allocator, l: *lexer.Lexer) !*Parser {
         var p = try allocator.create(Parser);
@@ -17,6 +22,8 @@ const Parser = struct {
             .cur_token = .{ .type = .Illegal, .literal = "" },
             .peek_token = .{ .type = .Illegal, .literal = "" },
             .errors = std.ArrayList([]u8).init(allocator),
+            .prefix_parse_fns = std.AutoHashMap(tok.TokenType, PrefixParseFn).init(allocator),
+            .infix_parse_fns = std.AutoHashMap(tok.TokenType, InfixParseFn).init(allocator),
         };
         p.next_token();
         p.next_token();
@@ -128,6 +135,14 @@ const Parser = struct {
             },
         );
         try self.errors.append(msg);
+    }
+
+    fn register_prefix(self: *Parser, token_type: tok.TokenType, prefix_fn: PrefixParseFn) !void {
+        try self.prefix_parse_fns.put(token_type, prefix_fn);
+    }
+
+    fn register_infix(self: *Parser, token_type: tok.TokenType, infix_fn: InfixParseFn) !void {
+        try self.infix_parse_fns.put(token_type, infix_fn);
     }
 };
 
