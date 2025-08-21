@@ -149,10 +149,22 @@ pub fn build(b: *std.Build) void {
             },
         }) },
     );
+    const ast_tests = b.addTest(
+        .{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("lib/ast/ast.zig"),
+                .target = target,
+                .imports = &.{
+                    .{ .name = "token", .module = token_mod },
+                },
+            }),
+        },
+    );
 
     // A run step that will run the test executable.
     const run_lexer_tests = b.addRunArtifact(lexer_tests);
     const run_parser_tests = b.addRunArtifact(parser_tests);
+    const run_ast_tests = b.addRunArtifact(ast_tests);
 
     // Creates an executable that will run `test` blocks from the executable's
     // root module. Note that test executables only test one module at a time,
@@ -170,6 +182,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_lexer_tests.step);
     test_step.dependOn(&run_parser_tests.step);
+    test_step.dependOn(&run_ast_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
