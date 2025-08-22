@@ -4,8 +4,30 @@ const lexer = @import("lexer");
 const tok = @import("token");
 const ast = @import("ast");
 
-const PrefixParseFn = fn () ast.Expression;
-const InfixParseFn = fn (ast.Expression) ast.Expression;
+const PrefixParseFn = *const fn (*Parser, std.mem.Allocator) anyerror!ast.Expression;
+const InfixParseFn = *const fn (*Parser, std.mem.Allocator, ast.Expression) ast.Expression;
+
+const Precedence = enum {
+    Lowest,
+    Equals,
+    LessGreater,
+    Sum,
+    Product,
+    Prefix,
+    Call,
+
+    fn rank(self: Precedence) u8 {
+        switch (self) {
+            .Lowest => return 1,
+            .Equals => return 2,
+            .LessGreater => return 3,
+            .Sum => return 4,
+            .Product => return 5,
+            .Prefix => return 6,
+            .Call => return 7,
+        }
+    }
+};
 
 const Parser = struct {
     l: *lexer.Lexer,
@@ -25,6 +47,8 @@ const Parser = struct {
             .prefix_parse_fns = std.AutoHashMap(tok.TokenType, PrefixParseFn).init(allocator),
             .infix_parse_fns = std.AutoHashMap(tok.TokenType, InfixParseFn).init(allocator),
         };
+        try p.prefix_parse_fns.put(.Ident, parse_identifier);
+
         p.next_token();
         p.next_token();
         return p;
@@ -35,6 +59,8 @@ const Parser = struct {
             allocator.free(err);
         }
         self.errors.deinit();
+        self.prefix_parse_fns.deinit();
+        self.infix_parse_fns.deinit();
         allocator.destroy(self);
     }
 
@@ -82,6 +108,10 @@ const Parser = struct {
         return let_stmt;
     }
 
+    fn parse_identifier(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+        return (try ast.Identifier.init(allocator, self.cur_token, self.cur_token.literal)).expression();
+    }
+
     fn parse_return_statement(self: *Parser, allocator: std.mem.Allocator) !*ast.ReturnStatement {
         const return_stmt = try ast.ReturnStatement.init(allocator, self.cur_token);
 
@@ -92,6 +122,29 @@ const Parser = struct {
         }
 
         return return_stmt;
+    }
+
+    fn parse_expression(self: *Parser, allocator: std.mem.Allocator, _: Precedence) !?ast.Expression {
+        const prefix = self.prefix_parse_fns.get(self.cur_token.type);
+        if (prefix) |prefix_fn| {
+            const left_exp = try prefix_fn(self, allocator);
+
+            return left_exp;
+        }
+
+        return null;
+    }
+
+    fn parse_expression_statement(self: *Parser, allocator: std.mem.Allocator) !*ast.ExpressionStatement {
+        const exp_stmt = try ast.ExpressionStatement.init(allocator, self.cur_token);
+
+        exp_stmt.expression = try self.parse_expression(allocator, Precedence.Lowest);
+
+        if (self.peek_token_is(.Semicolon)) {
+            self.next_token();
+        }
+
+        return exp_stmt;
     }
 
     fn parse_statement(self: *Parser, allocator: std.mem.Allocator) !?ast.Statement {
@@ -107,7 +160,10 @@ const Parser = struct {
                 const return_stmt = try self.parse_return_statement(allocator);
                 return return_stmt.statement();
             },
-            else => return null,
+            else => {
+                const exp_stmt = try self.parse_expression_statement(allocator);
+                return exp_stmt.statement();
+            },
         }
     }
 
@@ -239,4 +295,31 @@ test "test return statement" {
         const ret_stmt: *ast.ReturnStatement = @ptrCast(@alignCast(stmt.ptr));
         try testing.expect(std.mem.eql(u8, ret_stmt.token_literal(), "return"));
     }
+}
+
+test "test identifier expression" {
+    const input =
+        \\foobar;
+    ;
+
+    const allocator = std.testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit(allocator);
+
+    const program = try p.parse_program(allocator);
+    check_parser_errors(p);
+    defer program.deinit(allocator);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const stmt = program.statements.items[0];
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
+
+    const ident: *ast.Identifier = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    try testing.expect(std.mem.eql(u8, ident.token_literal(), "foobar"));
+    try testing.expect(std.mem.eql(u8, ident.value, "foobar"));
 }

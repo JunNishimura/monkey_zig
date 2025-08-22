@@ -281,6 +281,10 @@ pub const ExpressionStatement = struct {
         return self.token.literal;
     }
     fn deinit(self: *ExpressionStatement, allocator: std.mem.Allocator) void {
+        if (self.expression) |e| {
+            e.deinit(allocator);
+        }
+
         allocator.destroy(self);
     }
     fn string(self: *ExpressionStatement) ![]const u8 {
@@ -290,7 +294,7 @@ pub const ExpressionStatement = struct {
         return "";
     }
 
-    fn statement(self: *ExpressionStatement) Statement {
+    pub fn statement(self: *ExpressionStatement) Statement {
         return Statement.init(self);
     }
 
