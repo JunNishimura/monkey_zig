@@ -48,6 +48,7 @@ const Parser = struct {
             .infix_parse_fns = std.AutoHashMap(tok.TokenType, InfixParseFn).init(allocator),
         };
         try p.prefix_parse_fns.put(.Ident, parse_identifier);
+        try p.prefix_parse_fns.put(.Int, parse_integer_literal);
 
         p.next_token();
         p.next_token();
@@ -145,6 +146,15 @@ const Parser = struct {
         }
 
         return exp_stmt;
+    }
+
+    fn parse_integer_literal(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+        const lit = try ast.IntegerLiteral.init(allocator, self.cur_token);
+
+        const int_value = try std.fmt.parseInt(i64, self.cur_token.literal, 10);
+        lit.value = int_value;
+
+        return lit.expression();
     }
 
     fn parse_statement(self: *Parser, allocator: std.mem.Allocator) !?ast.Statement {
@@ -322,4 +332,31 @@ test "test identifier expression" {
     const ident: *ast.Identifier = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
     try testing.expect(std.mem.eql(u8, ident.token_literal(), "foobar"));
     try testing.expect(std.mem.eql(u8, ident.value, "foobar"));
+}
+
+test "test integer literal expression" {
+    const input =
+        \\5;
+    ;
+
+    const allocator = std.testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit(allocator);
+
+    const program = try p.parse_program(allocator);
+    check_parser_errors(p);
+    defer program.deinit(allocator);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const stmt = program.statements.items[0];
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
+
+    const lit: *ast.IntegerLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    try testing.expect(std.mem.eql(u8, lit.token_literal(), "5"));
+    try testing.expect(lit.value == 5);
 }
