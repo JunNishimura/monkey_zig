@@ -337,6 +337,38 @@ pub const Identifier = struct {
     }
 };
 
+pub const IntegerLiteral = struct {
+    token: Token,
+    value: ?i64,
+
+    pub fn token_literal(self: *IntegerLiteral) []const u8 {
+        return self.token.literal;
+    }
+
+    fn expression_node(_: *IntegerLiteral) void {}
+
+    pub fn deinit(self: *IntegerLiteral, allocator: std.mem.Allocator) void {
+        allocator.destroy(self);
+    }
+
+    pub fn string(self: *IntegerLiteral) ![]const u8 {
+        return self.token.literal;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token) !*IntegerLiteral {
+        const lit = try allocator.create(IntegerLiteral);
+        lit.* = .{
+            .token = token,
+            .value = null,
+        };
+        return lit;
+    }
+
+    pub fn expression(self: *IntegerLiteral) Expression {
+        return Expression.init(self);
+    }
+};
+
 test "test string" {
     const allocator = testing.allocator;
 
