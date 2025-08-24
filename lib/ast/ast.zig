@@ -357,6 +357,59 @@ pub const PrefixExpression = struct {
     }
 };
 
+pub const InfixExpression = struct {
+    token: Token,
+    left: Expression,
+    operator: []const u8,
+    right: ?Expression,
+    str_list: std.ArrayList(u8),
+
+    fn expression_node(_: *InfixExpression) void {}
+
+    fn token_literal(self: *InfixExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    fn string(self: *InfixExpression) ![]const u8 {
+        try self.str_list.appendSlice("(");
+        try self.str_list.appendSlice(try self.left.string());
+        try self.str_list.appendSlice(" ");
+        try self.str_list.appendSlice(self.operator);
+        try self.str_list.appendSlice(" ");
+        if (self.right) |r| {
+            const right_str = try r.string();
+            try self.str_list.appendSlice(right_str);
+        }
+        try self.str_list.appendSlice(")");
+        return self.str_list.items;
+    }
+
+    pub fn expression(self: *InfixExpression) Expression {
+        return Expression.init(self);
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token, operator: []const u8, left: Expression) !*InfixExpression {
+        const infix_exp = try allocator.create(InfixExpression);
+        infix_exp.* = .{
+            .token = token,
+            .left = left,
+            .operator = operator,
+            .right = null,
+            .str_list = std.ArrayList(u8).init(allocator),
+        };
+        return infix_exp;
+    }
+
+    pub fn deinit(self: *InfixExpression, allocator: std.mem.Allocator) void {
+        self.str_list.deinit();
+        self.left.deinit(allocator);
+        if (self.right) |r| {
+            r.deinit(allocator);
+        }
+        allocator.destroy(self);
+    }
+};
+
 pub const Identifier = struct {
     token: Token,
     value: []const u8,

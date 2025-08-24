@@ -35,6 +35,38 @@ pub const TokenType = enum {
     If,
     Else,
     Return,
+
+    pub fn string(self: TokenType) []const u8 {
+        return switch (self) {
+            .Illegal => "ILLEGAL",
+            .Eof => "EOF",
+            .Ident => "IDENT",
+            .Int => "INT",
+            .Assign => "=",
+            .Plus => "+",
+            .Minus => "-",
+            .Bang => "!",
+            .Asterisk => "*",
+            .Slash => "/",
+            .LessThan => "<",
+            .GreaterThan => ">",
+            .Eq => "==",
+            .NotEq => "!=",
+            .Comma => ",",
+            .Semicolon => ";",
+            .LParen => "(",
+            .RParen => ")",
+            .LBrace => "{",
+            .RBrace => "}",
+            .Function => "FUNCTION",
+            .Let => "LET",
+            .True => "TRUE",
+            .False => "FALSE",
+            .If => "IF",
+            .Else => "ELSE",
+            .Return => "RETURN",
+        };
+    }
 };
 
 pub const Token = struct {

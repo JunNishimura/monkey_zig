@@ -5,7 +5,7 @@ const tok = @import("token");
 const ast = @import("ast");
 
 const PrefixParseFn = *const fn (*Parser, std.mem.Allocator) anyerror!ast.Expression;
-const InfixParseFn = *const fn (*Parser, std.mem.Allocator, ast.Expression) ast.Expression;
+const InfixParseFn = *const fn (*Parser, std.mem.Allocator, ast.Expression) anyerror!ast.Expression;
 
 const Precedence = enum {
     Lowest,
@@ -27,7 +27,22 @@ const Precedence = enum {
             .Call => return 7,
         }
     }
+
+    pub fn is_lower(self: Precedence, other: Precedence) bool {
+        return self.rank() < other.rank();
+    }
 };
+
+const Precedences = std.StaticStringMap(Precedence).initComptime(.{
+    .{ tok.TokenType.Eq.string(), Precedence.Equals },
+    .{ tok.TokenType.NotEq.string(), Precedence.Equals },
+    .{ tok.TokenType.LessThan.string(), Precedence.LessGreater },
+    .{ tok.TokenType.GreaterThan.string(), Precedence.LessGreater },
+    .{ tok.TokenType.Plus.string(), Precedence.Sum },
+    .{ tok.TokenType.Minus.string(), Precedence.Sum },
+    .{ tok.TokenType.Asterisk.string(), Precedence.Product },
+    .{ tok.TokenType.Slash.string(), Precedence.Product },
+});
 
 const Parser = struct {
     l: *lexer.Lexer,
@@ -51,6 +66,14 @@ const Parser = struct {
         try p.prefix_parse_fns.put(.Int, parse_integer_literal);
         try p.prefix_parse_fns.put(.Bang, parse_prefix_expression);
         try p.prefix_parse_fns.put(.Minus, parse_prefix_expression);
+        try p.infix_parse_fns.put(.Plus, parse_infix_expression);
+        try p.infix_parse_fns.put(.Minus, parse_infix_expression);
+        try p.infix_parse_fns.put(.Asterisk, parse_infix_expression);
+        try p.infix_parse_fns.put(.Slash, parse_infix_expression);
+        try p.infix_parse_fns.put(.Eq, parse_infix_expression);
+        try p.infix_parse_fns.put(.NotEq, parse_infix_expression);
+        try p.infix_parse_fns.put(.LessThan, parse_infix_expression);
+        try p.infix_parse_fns.put(.GreaterThan, parse_infix_expression);
 
         p.next_token();
         p.next_token();
@@ -87,6 +110,16 @@ const Parser = struct {
 
     fn cur_token_is(self: *Parser, token_type: tok.TokenType) bool {
         return self.cur_token.type == token_type;
+    }
+
+    fn peek_precedence(self: *Parser) Precedence {
+        const precedence = Precedences.get(self.peek_token.type.string());
+        return precedence orelse Precedence.Lowest;
+    }
+
+    fn cur_precedence(self: *Parser) Precedence {
+        const precedence = Precedences.get(self.cur_token.type.string());
+        return precedence orelse Precedence.Lowest;
     }
 
     fn parse_let_statement(self: *Parser, allocator: std.mem.Allocator) !?*ast.LetStatement {
@@ -127,16 +160,27 @@ const Parser = struct {
         return return_stmt;
     }
 
-    fn parse_expression(self: *Parser, allocator: std.mem.Allocator, _: Precedence) !?ast.Expression {
+    fn parse_expression(self: *Parser, allocator: std.mem.Allocator, precedence: Precedence) !?ast.Expression {
         const prefix = self.prefix_parse_fns.get(self.cur_token.type);
-        if (prefix) |prefix_fn| {
-            const left_exp = try prefix_fn(self, allocator);
-
-            return left_exp;
+        if (prefix == null) {
+            try self.no_prefix_parse_fn_error(allocator, self.cur_token.type);
+            return null;
         }
 
-        try self.no_prefix_parse_fn_error(allocator, self.cur_token.type);
-        return null;
+        var left_exp = try prefix.?(self, allocator);
+
+        while (!self.peek_token_is(.Semicolon) and precedence.is_lower(self.peek_precedence())) {
+            const infix = self.infix_parse_fns.get(self.peek_token.type);
+            if (infix == null) {
+                return left_exp;
+            }
+
+            self.next_token();
+
+            left_exp = try infix.?(self, allocator, left_exp);
+        }
+
+        return left_exp;
     }
 
     fn parse_expression_statement(self: *Parser, allocator: std.mem.Allocator) !*ast.ExpressionStatement {
@@ -168,6 +212,21 @@ const Parser = struct {
         prefix_exp.right = try self.parse_expression(allocator, .Prefix);
 
         return prefix_exp.expression();
+    }
+
+    fn parse_infix_expression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !ast.Expression {
+        const infix_exp = try ast.InfixExpression.init(
+            allocator,
+            self.cur_token,
+            self.cur_token.literal,
+            left,
+        );
+
+        const precedence = self.cur_precedence();
+        self.next_token();
+        infix_exp.right = try self.parse_expression(allocator, precedence);
+
+        return infix_exp.expression();
     }
 
     fn parse_statement(self: *Parser, allocator: std.mem.Allocator) !?ast.Statement {
@@ -431,5 +490,84 @@ test "test parsing prefix expressions" {
         const prefix_expr: *ast.PrefixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
         try testing.expect(std.mem.eql(u8, prefix_expr.operator, prefix_test.operator));
         try testing.expect(try test_integer_literal(allocator, prefix_expr.right.?, prefix_test.integer_value));
+    }
+}
+
+test "test parsing infix expressions" {
+    const infix_tests = [_]struct {
+        input: []const u8,
+        left_value: i64,
+        operator: []const u8,
+        right_value: i64,
+    }{
+        .{ .input = "5 + 5;", .left_value = 5, .operator = "+", .right_value = 5 },
+        .{ .input = "5 - 5;", .left_value = 5, .operator = "-", .right_value = 5 },
+        .{ .input = "5 * 5;", .left_value = 5, .operator = "*", .right_value = 5 },
+        .{ .input = "5 / 5;", .left_value = 5, .operator = "/", .right_value = 5 },
+        .{ .input = "5 > 5;", .left_value = 5, .operator = ">", .right_value = 5 },
+        .{ .input = "5 < 5;", .left_value = 5, .operator = "<", .right_value = 5 },
+        .{ .input = "5 == 5;", .left_value = 5, .operator = "==", .right_value = 5 },
+        .{ .input = "5 != 5;", .left_value = 5, .operator = "!=", .right_value = 5 },
+    };
+
+    for (infix_tests) |infix_test| {
+        const allocator = std.testing.allocator;
+
+        const l = try lexer.Lexer.init(allocator, infix_test.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit(allocator);
+
+        const program = try p.parse_program(allocator);
+        check_parser_errors(p);
+        defer program.deinit(allocator);
+
+        try testing.expect(program.statements.items.len == 1);
+
+        const stmt = program.statements.items[0];
+        const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
+
+        const infix_expr: *ast.InfixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+        try testing.expect(try test_integer_literal(allocator, infix_expr.left, infix_test.left_value));
+        try testing.expect(std.mem.eql(u8, infix_expr.operator, infix_test.operator));
+        try testing.expect(try test_integer_literal(allocator, infix_expr.right.?, infix_test.right_value));
+    }
+}
+
+test "test operator precedence parsing" {
+    const precedence_tests = [_]struct {
+        input: []const u8,
+        expected: []const u8,
+    }{
+        .{ .input = "-a * b", .expected = "((-a) * b)" },
+        .{ .input = "!-a", .expected = "(!(-a))" },
+        .{ .input = "a + b + c", .expected = "((a + b) + c)" },
+        .{ .input = "a + b - c", .expected = "((a + b) - c)" },
+        .{ .input = "a * b * c", .expected = "((a * b) * c)" },
+        .{ .input = "a * b / c", .expected = "((a * b) / c)" },
+        .{ .input = "a + b / c", .expected = "(a + (b / c))" },
+        .{ .input = "a + b * c + d / e - f", .expected = "(((a + (b * c)) + (d / e)) - f)" },
+        .{ .input = "3 + 4; -5 * 5", .expected = "(3 + 4)((-5) * 5)" },
+        .{ .input = "5 > 4 == 3 < 4", .expected = "((5 > 4) == (3 < 4))" },
+        .{ .input = "5 < 4 != 3 > 4", .expected = "((5 < 4) != (3 > 4))" },
+        .{ .input = "3 + 4 * 5 == 3 * 1 + 4 * 5", .expected = "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))" },
+    };
+
+    for (precedence_tests) |precedence_test| {
+        const allocator = std.testing.allocator;
+
+        const l = try lexer.Lexer.init(allocator, precedence_test.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit(allocator);
+
+        const program = try p.parse_program(allocator);
+        check_parser_errors(p);
+        defer program.deinit(allocator);
+
+        const program_str = try program.string();
+        try testing.expect(std.mem.eql(u8, program_str, precedence_test.expected));
     }
 }
