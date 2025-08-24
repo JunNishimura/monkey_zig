@@ -308,6 +308,55 @@ pub const ExpressionStatement = struct {
     }
 };
 
+pub const PrefixExpression = struct {
+    token: Token,
+    operator: []const u8,
+    right: ?Expression,
+    str_list: std.ArrayList(u8),
+
+    fn expression_node(_: *PrefixExpression) void {}
+
+    pub fn token_literal(self: *PrefixExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    pub fn string(self: *PrefixExpression) ![]const u8 {
+        try self.str_list.appendSlice("(");
+        try self.str_list.appendSlice(self.operator);
+
+        if (self.right) |r| {
+            const right_str = try r.string();
+            try self.str_list.appendSlice(right_str);
+        }
+
+        try self.str_list.appendSlice(")");
+        return self.str_list.items;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token, operator: []const u8) !*PrefixExpression {
+        const prefix_exp = try allocator.create(PrefixExpression);
+        prefix_exp.* = .{
+            .token = token,
+            .operator = operator,
+            .right = null,
+            .str_list = std.ArrayList(u8).init(allocator),
+        };
+        return prefix_exp;
+    }
+
+    pub fn deinit(self: *PrefixExpression, allocator: std.mem.Allocator) void {
+        self.str_list.deinit();
+        if (self.right) |r| {
+            r.deinit(allocator);
+        }
+        allocator.destroy(self);
+    }
+
+    pub fn expression(self: *PrefixExpression) Expression {
+        return Expression.init(self);
+    }
+};
+
 pub const Identifier = struct {
     token: Token,
     value: []const u8,
