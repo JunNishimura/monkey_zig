@@ -64,6 +64,8 @@ const Parser = struct {
         };
         try p.prefix_parse_fns.put(.Ident, parse_identifier);
         try p.prefix_parse_fns.put(.Int, parse_integer_literal);
+        try p.prefix_parse_fns.put(.True, parse_boolean);
+        try p.prefix_parse_fns.put(.False, parse_boolean);
         try p.prefix_parse_fns.put(.Bang, parse_prefix_expression);
         try p.prefix_parse_fns.put(.Minus, parse_prefix_expression);
         try p.infix_parse_fns.put(.Plus, parse_infix_expression);
@@ -202,6 +204,10 @@ const Parser = struct {
         lit.value = int_value;
 
         return lit.expression();
+    }
+
+    fn parse_boolean(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+        return (try ast.Boolean.init(allocator, self.cur_token, self.cur_token_is(.True))).expression();
     }
 
     fn parse_prefix_expression(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
@@ -603,4 +609,34 @@ fn test_infix_expressoin(allocator: std.mem.Allocator, exp: ast.Expression, left
     }
 
     return true;
+}
+
+test "test boolean expression" {
+    const boolean_tests = [_]struct {
+        input: []const u8,
+        expected: bool,
+    }{
+        .{ .input = "true;", .expected = true },
+        .{ .input = "false;", .expected = false },
+    };
+
+    for (boolean_tests) |boolean_test| {
+        const allocator = std.testing.allocator;
+
+        const l = try lexer.Lexer.init(allocator, boolean_test.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit(allocator);
+
+        const program = try p.parse_program(allocator);
+        check_parser_errors(p);
+        defer program.deinit(allocator);
+
+        const stmt = program.statements.items[0];
+        const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
+
+        const boolean_exp: *ast.Boolean = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+        try testing.expect(boolean_exp.value == boolean_test.expected);
+    }
 }

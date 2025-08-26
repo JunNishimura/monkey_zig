@@ -471,6 +471,38 @@ pub const IntegerLiteral = struct {
     }
 };
 
+pub const Boolean = struct {
+    token: Token,
+    value: bool,
+
+    pub fn token_literal(self: *Boolean) []const u8 {
+        return self.token.literal;
+    }
+
+    fn expression_node(_: *Boolean) void {}
+
+    pub fn string(self: *Boolean) ![]const u8 {
+        return self.token.literal;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token, value: bool) !*Boolean {
+        const b = try allocator.create(Boolean);
+        b.* = .{
+            .token = token,
+            .value = value,
+        };
+        return b;
+    }
+
+    pub fn deinit(self: *Boolean, allocator: std.mem.Allocator) void {
+        allocator.destroy(self);
+    }
+
+    pub fn expression(self: *Boolean) Expression {
+        return Expression.init(self);
+    }
+};
+
 test "test string" {
     const allocator = testing.allocator;
 
