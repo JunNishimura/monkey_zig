@@ -499,6 +499,40 @@ test "test parsing prefix expressions" {
     }
 }
 
+test "test parsing prefix boolean expressions" {
+    const prefix_tests = [_]struct {
+        input: []const u8,
+        operator: []const u8,
+        boolean_value: bool,
+    }{
+        .{ .input = "!true", .operator = "!", .boolean_value = true },
+        .{ .input = "!false", .operator = "!", .boolean_value = false },
+    };
+
+    for (prefix_tests) |prefix_test| {
+        const allocator = std.testing.allocator;
+
+        const l = try lexer.Lexer.init(allocator, prefix_test.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit(allocator);
+
+        const program = try p.parse_program(allocator);
+        check_parser_errors(p);
+        defer program.deinit(allocator);
+
+        try testing.expect(program.statements.items.len == 1);
+
+        const stmt = program.statements.items[0];
+        const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
+
+        const prefix_expr: *ast.PrefixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+        try testing.expect(std.mem.eql(u8, prefix_expr.operator, prefix_test.operator));
+        try testing.expect(test_boolean_literal(prefix_expr.right.?, prefix_test.boolean_value));
+    }
+}
+
 test "test parsing infix expressions" {
     const infix_tests = [_]struct {
         input: []const u8,
@@ -535,9 +569,42 @@ test "test parsing infix expressions" {
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
         const infix_expr: *ast.InfixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
-        try testing.expect(try test_integer_literal(allocator, infix_expr.left, infix_test.left_value));
-        try testing.expect(std.mem.eql(u8, infix_expr.operator, infix_test.operator));
-        try testing.expect(try test_integer_literal(allocator, infix_expr.right.?, infix_test.right_value));
+        try testing.expect(try test_infix_expression(allocator, infix_expr.expression(), infix_test.left_value, infix_test.operator, infix_test.right_value));
+    }
+}
+
+test "test parsing infix boolean expressions" {
+    const infix_tests = [_]struct {
+        input: []const u8,
+        left_value: bool,
+        operator: []const u8,
+        right_value: bool,
+    }{
+        .{ .input = "true == true", .left_value = true, .operator = "==", .right_value = true },
+        .{ .input = "true != false", .left_value = true, .operator = "!=", .right_value = false },
+        .{ .input = "false == false", .left_value = false, .operator = "==", .right_value = false },
+    };
+
+    for (infix_tests) |infix_test| {
+        const allocator = std.testing.allocator;
+
+        const l = try lexer.Lexer.init(allocator, infix_test.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit(allocator);
+
+        const program = try p.parse_program(allocator);
+        check_parser_errors(p);
+        defer program.deinit(allocator);
+
+        try testing.expect(program.statements.items.len == 1);
+
+        const stmt = program.statements.items[0];
+        const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
+
+        const infix_expr: *ast.InfixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+        try testing.expect(try test_infix_expression(allocator, infix_expr.expression(), infix_test.left_value, infix_test.operator, infix_test.right_value));
     }
 }
 
@@ -558,6 +625,10 @@ test "test operator precedence parsing" {
         .{ .input = "5 > 4 == 3 < 4", .expected = "((5 > 4) == (3 < 4))" },
         .{ .input = "5 < 4 != 3 > 4", .expected = "((5 < 4) != (3 > 4))" },
         .{ .input = "3 + 4 * 5 == 3 * 1 + 4 * 5", .expected = "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))" },
+        .{ .input = "true", .expected = "true" },
+        .{ .input = "false", .expected = "false" },
+        .{ .input = "3 > 5 == false", .expected = "((3 > 5) == false)" },
+        .{ .input = "3 < 5 == true", .expected = "((3 < 5) == true)" },
     };
 
     for (precedence_tests) |precedence_test| {
@@ -585,26 +656,37 @@ fn test_identifier(exp: ast.Expression, value: []const u8) !bool {
     try testing.expect(std.mem.eql(u8, ident.token_literal(), value));
 }
 
+fn test_boolean_literal(exp: ast.Expression, value: bool) bool {
+    const boolean_exp: *ast.Boolean = @ptrCast(@alignCast(exp.ptr));
+
+    if (boolean_exp.value != value) return false;
+
+    if (!std.mem.eql(u8, boolean_exp.token_literal(), if (value) "true" else "false")) return false;
+
+    return true;
+}
+
 fn test_literal_expression(allocator: std.mem.Allocator, exp: ast.Expression, expected: anytype) !bool {
     switch (@TypeOf(expected)) {
         i64 => return test_integer_literal(allocator, exp, expected),
         []const u8 => return test_identifier(exp, expected),
+        bool => return test_boolean_literal(exp, expected),
         else => return false,
     }
 }
 
-fn test_infix_expressoin(allocator: std.mem.Allocator, exp: ast.Expression, left: anytype, operator: []const u8, right: anytype) !bool {
+fn test_infix_expression(allocator: std.mem.Allocator, exp: ast.Expression, left: anytype, operator: []const u8, right: anytype) !bool {
     const infix_exp: *ast.InfixExpression = @ptrCast(@alignCast(exp.ptr));
 
     if (!(try test_literal_expression(allocator, infix_exp.left, left))) {
         return false;
     }
 
-    if (!(try std.mem.eql(u8, infix_exp.operator, operator))) {
+    if (!std.mem.eql(u8, infix_exp.operator, operator)) {
         return false;
     }
 
-    if (!(try test_literal_expression(allocator, infix_exp.right, right))) {
+    if (!(try test_literal_expression(allocator, infix_exp.right.?, right))) {
         return false;
     }
 
