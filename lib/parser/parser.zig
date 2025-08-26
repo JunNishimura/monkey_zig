@@ -571,3 +571,36 @@ test "test operator precedence parsing" {
         try testing.expect(std.mem.eql(u8, program_str, precedence_test.expected));
     }
 }
+
+fn test_identifier(exp: ast.Expression, value: []const u8) !bool {
+    const ident: *ast.Identifier = @ptrCast(@alignCast(exp.ptr));
+
+    try testing.expect(std.mem.eql(u8, ident.value, value));
+    try testing.expect(std.mem.eql(u8, ident.token_literal(), value));
+}
+
+fn test_literal_expression(allocator: std.mem.Allocator, exp: ast.Expression, expected: anytype) !bool {
+    switch (@TypeOf(expected)) {
+        i64 => return test_integer_literal(allocator, exp, expected),
+        []const u8 => return test_identifier(exp, expected),
+        else => return false,
+    }
+}
+
+fn test_infix_expressoin(allocator: std.mem.Allocator, exp: ast.Expression, left: anytype, operator: []const u8, right: anytype) !bool {
+    const infix_exp: *ast.InfixExpression = @ptrCast(@alignCast(exp.ptr));
+
+    if (!(try test_literal_expression(allocator, infix_exp.left, left))) {
+        return false;
+    }
+
+    if (!(try std.mem.eql(u8, infix_exp.operator, operator))) {
+        return false;
+    }
+
+    if (!(try test_literal_expression(allocator, infix_exp.right, right))) {
+        return false;
+    }
+
+    return true;
+}
