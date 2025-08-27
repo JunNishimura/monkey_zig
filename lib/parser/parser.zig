@@ -28,7 +28,7 @@ const Precedence = enum {
         }
     }
 
-    pub fn is_lower(self: Precedence, other: Precedence) bool {
+    pub fn isLower(self: Precedence, other: Precedence) bool {
         return self.rank() < other.rank();
     }
 };
@@ -62,23 +62,23 @@ const Parser = struct {
             .prefix_parse_fns = std.AutoHashMap(tok.TokenType, PrefixParseFn).init(allocator),
             .infix_parse_fns = std.AutoHashMap(tok.TokenType, InfixParseFn).init(allocator),
         };
-        try p.prefix_parse_fns.put(.Ident, parse_identifier);
-        try p.prefix_parse_fns.put(.Int, parse_integer_literal);
-        try p.prefix_parse_fns.put(.True, parse_boolean);
-        try p.prefix_parse_fns.put(.False, parse_boolean);
-        try p.prefix_parse_fns.put(.Bang, parse_prefix_expression);
-        try p.prefix_parse_fns.put(.Minus, parse_prefix_expression);
-        try p.infix_parse_fns.put(.Plus, parse_infix_expression);
-        try p.infix_parse_fns.put(.Minus, parse_infix_expression);
-        try p.infix_parse_fns.put(.Asterisk, parse_infix_expression);
-        try p.infix_parse_fns.put(.Slash, parse_infix_expression);
-        try p.infix_parse_fns.put(.Eq, parse_infix_expression);
-        try p.infix_parse_fns.put(.NotEq, parse_infix_expression);
-        try p.infix_parse_fns.put(.LessThan, parse_infix_expression);
-        try p.infix_parse_fns.put(.GreaterThan, parse_infix_expression);
+        try p.registerPrefix(.Ident, parseIdentifier);
+        try p.registerPrefix(.Int, parseIntegerLiteral);
+        try p.registerPrefix(.True, parseBoolean);
+        try p.registerPrefix(.False, parseBoolean);
+        try p.registerPrefix(.Bang, parsePrefixExpression);
+        try p.registerPrefix(.Minus, parsePrefixExpression);
+        try p.registerInfix(.Plus, parseInfixExpression);
+        try p.registerInfix(.Minus, parseInfixExpression);
+        try p.registerInfix(.Asterisk, parseInfixExpression);
+        try p.registerInfix(.Slash, parseInfixExpression);
+        try p.registerInfix(.Eq, parseInfixExpression);
+        try p.registerInfix(.NotEq, parseInfixExpression);
+        try p.registerInfix(.LessThan, parseInfixExpression);
+        try p.registerInfix(.GreaterThan, parseInfixExpression);
 
-        p.next_token();
-        p.next_token();
+        p.nextToken();
+        p.nextToken();
         return p;
     }
 
@@ -92,92 +92,92 @@ const Parser = struct {
         allocator.destroy(self);
     }
 
-    fn next_token(self: *Parser) void {
+    fn nextToken(self: *Parser) void {
         self.cur_token = self.peek_token;
-        self.peek_token = self.l.next_token();
+        self.peek_token = self.l.nextToken();
     }
 
-    fn peek_token_is(self: *Parser, token_type: tok.TokenType) bool {
+    fn peekTokenIs(self: *Parser, token_type: tok.TokenType) bool {
         return self.peek_token.type == token_type;
     }
 
-    fn expect_peek(self: *Parser, allocator: std.mem.Allocator, token_type: tok.TokenType) !bool {
-        if (self.peek_token_is(token_type)) {
-            self.next_token();
+    fn expectPeek(self: *Parser, allocator: std.mem.Allocator, token_type: tok.TokenType) !bool {
+        if (self.peekTokenIs(token_type)) {
+            self.nextToken();
             return true;
         }
-        try self.peek_error(allocator, token_type);
+        try self.peekError(allocator, token_type);
         return false;
     }
 
-    fn cur_token_is(self: *Parser, token_type: tok.TokenType) bool {
+    fn curTokenIs(self: *Parser, token_type: tok.TokenType) bool {
         return self.cur_token.type == token_type;
     }
 
-    fn peek_precedence(self: *Parser) Precedence {
+    fn peekPrecedence(self: *Parser) Precedence {
         const precedence = Precedences.get(self.peek_token.type.string());
         return precedence orelse Precedence.Lowest;
     }
 
-    fn cur_precedence(self: *Parser) Precedence {
+    fn curPrecedence(self: *Parser) Precedence {
         const precedence = Precedences.get(self.cur_token.type.string());
         return precedence orelse Precedence.Lowest;
     }
 
-    fn parse_let_statement(self: *Parser, allocator: std.mem.Allocator) !?*ast.LetStatement {
+    fn parseLetStatement(self: *Parser, allocator: std.mem.Allocator) !?*ast.LetStatement {
         const let_stmt = try ast.LetStatement.init(allocator, self.cur_token);
 
-        const is_ident = try self.expect_peek(allocator, .Ident);
+        const is_ident = try self.expectPeek(allocator, .Ident);
         if (!is_ident) {
             return null;
         }
 
         let_stmt.name = try ast.Identifier.init(allocator, self.cur_token, self.cur_token.literal);
 
-        const is_assign = try self.expect_peek(allocator, .Assign);
+        const is_assign = try self.expectPeek(allocator, .Assign);
         if (!is_assign) {
             return null;
         }
 
-        while (!self.cur_token_is(.Semicolon)) {
-            self.next_token();
+        while (!self.curTokenIs(.Semicolon)) {
+            self.nextToken();
         }
 
         return let_stmt;
     }
 
-    fn parse_identifier(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+    fn parseIdentifier(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
         return (try ast.Identifier.init(allocator, self.cur_token, self.cur_token.literal)).expression();
     }
 
-    fn parse_return_statement(self: *Parser, allocator: std.mem.Allocator) !*ast.ReturnStatement {
+    fn parseReturnStatement(self: *Parser, allocator: std.mem.Allocator) !*ast.ReturnStatement {
         const return_stmt = try ast.ReturnStatement.init(allocator, self.cur_token);
 
-        self.next_token();
+        self.nextToken();
 
-        while (!self.cur_token_is(.Semicolon)) {
-            self.next_token();
+        while (!self.curTokenIs(.Semicolon)) {
+            self.nextToken();
         }
 
         return return_stmt;
     }
 
-    fn parse_expression(self: *Parser, allocator: std.mem.Allocator, precedence: Precedence) !?ast.Expression {
+    fn parseExpression(self: *Parser, allocator: std.mem.Allocator, precedence: Precedence) !?ast.Expression {
         const prefix = self.prefix_parse_fns.get(self.cur_token.type);
         if (prefix == null) {
-            try self.no_prefix_parse_fn_error(allocator, self.cur_token.type);
+            try self.noPrefixParseFnError(allocator, self.cur_token.type);
             return null;
         }
 
         var left_exp = try prefix.?(self, allocator);
 
-        while (!self.peek_token_is(.Semicolon) and precedence.is_lower(self.peek_precedence())) {
+        while (!self.peekTokenIs(.Semicolon) and precedence.isLower(self.peekPrecedence())) {
             const infix = self.infix_parse_fns.get(self.peek_token.type);
             if (infix == null) {
                 return left_exp;
             }
 
-            self.next_token();
+            self.nextToken();
 
             left_exp = try infix.?(self, allocator, left_exp);
         }
@@ -185,19 +185,19 @@ const Parser = struct {
         return left_exp;
     }
 
-    fn parse_expression_statement(self: *Parser, allocator: std.mem.Allocator) !*ast.ExpressionStatement {
+    fn parseExpressionStatement(self: *Parser, allocator: std.mem.Allocator) !*ast.ExpressionStatement {
         const exp_stmt = try ast.ExpressionStatement.init(allocator, self.cur_token);
 
-        exp_stmt.expression = try self.parse_expression(allocator, .Lowest);
+        exp_stmt.expression = try self.parseExpression(allocator, .Lowest);
 
-        if (self.peek_token_is(.Semicolon)) {
-            self.next_token();
+        if (self.peekTokenIs(.Semicolon)) {
+            self.nextToken();
         }
 
         return exp_stmt;
     }
 
-    fn parse_integer_literal(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+    fn parseIntegerLiteral(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
         const lit = try ast.IntegerLiteral.init(allocator, self.cur_token);
 
         const int_value = try std.fmt.parseInt(i64, self.cur_token.literal, 10);
@@ -206,21 +206,21 @@ const Parser = struct {
         return lit.expression();
     }
 
-    fn parse_boolean(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
-        return (try ast.Boolean.init(allocator, self.cur_token, self.cur_token_is(.True))).expression();
+    fn parseBoolean(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+        return (try ast.Boolean.init(allocator, self.cur_token, self.curTokenIs(.True))).expression();
     }
 
-    fn parse_prefix_expression(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+    fn parsePrefixExpression(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
         const prefix_exp = try ast.PrefixExpression.init(allocator, self.cur_token, self.cur_token.literal);
 
-        self.next_token();
+        self.nextToken();
 
-        prefix_exp.right = try self.parse_expression(allocator, .Prefix);
+        prefix_exp.right = try self.parseExpression(allocator, .Prefix);
 
         return prefix_exp.expression();
     }
 
-    fn parse_infix_expression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !ast.Expression {
+    fn parseInfixExpression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !ast.Expression {
         const infix_exp = try ast.InfixExpression.init(
             allocator,
             self.cur_token,
@@ -228,48 +228,48 @@ const Parser = struct {
             left,
         );
 
-        const precedence = self.cur_precedence();
-        self.next_token();
-        infix_exp.right = try self.parse_expression(allocator, precedence);
+        const precedence = self.curPrecedence();
+        self.nextToken();
+        infix_exp.right = try self.parseExpression(allocator, precedence);
 
         return infix_exp.expression();
     }
 
-    fn parse_statement(self: *Parser, allocator: std.mem.Allocator) !?ast.Statement {
+    fn parseStatement(self: *Parser, allocator: std.mem.Allocator) !?ast.Statement {
         switch (self.cur_token.type) {
             .Let => {
-                const let_stmt = try self.parse_let_statement(allocator);
+                const let_stmt = try self.parseLetStatement(allocator);
                 if (let_stmt) |ls| {
                     return ls.statement();
                 }
                 return null;
             },
             .Return => {
-                const return_stmt = try self.parse_return_statement(allocator);
+                const return_stmt = try self.parseReturnStatement(allocator);
                 return return_stmt.statement();
             },
             else => {
-                const exp_stmt = try self.parse_expression_statement(allocator);
+                const exp_stmt = try self.parseExpressionStatement(allocator);
                 return exp_stmt.statement();
             },
         }
     }
 
-    fn parse_program(self: *Parser, allocator: std.mem.Allocator) !*ast.Program {
+    fn parseProgram(self: *Parser, allocator: std.mem.Allocator) !*ast.Program {
         const program = try ast.Program.init(allocator);
 
         while (self.cur_token.type != .Eof) {
-            const stmt = try self.parse_statement(allocator);
+            const stmt = try self.parseStatement(allocator);
             if (stmt) |s| {
                 try program.statements.append(s);
             }
-            self.next_token();
+            self.nextToken();
         }
 
         return program;
     }
 
-    fn peek_error(self: *Parser, allocator: std.mem.Allocator, token_type: tok.TokenType) !void {
+    fn peekError(self: *Parser, allocator: std.mem.Allocator, token_type: tok.TokenType) !void {
         const msg = try std.fmt.allocPrint(
             allocator,
             "expected next token to be {any}, got {any} instead",
@@ -281,7 +281,7 @@ const Parser = struct {
         try self.errors.append(msg);
     }
 
-    fn no_prefix_parse_fn_error(self: *Parser, allocator: std.mem.Allocator, token_type: tok.TokenType) !void {
+    fn noPrefixParseFnError(self: *Parser, allocator: std.mem.Allocator, token_type: tok.TokenType) !void {
         const msg = try std.fmt.allocPrint(
             allocator,
             "no prefix parse function for {any} found",
@@ -290,11 +290,11 @@ const Parser = struct {
         try self.errors.append(msg);
     }
 
-    fn register_prefix(self: *Parser, token_type: tok.TokenType, prefix_fn: PrefixParseFn) !void {
+    fn registerPrefix(self: *Parser, token_type: tok.TokenType, prefix_fn: PrefixParseFn) !void {
         try self.prefix_parse_fns.put(token_type, prefix_fn);
     }
 
-    fn register_infix(self: *Parser, token_type: tok.TokenType, infix_fn: InfixParseFn) !void {
+    fn registerInfix(self: *Parser, token_type: tok.TokenType, infix_fn: InfixParseFn) !void {
         try self.infix_parse_fns.put(token_type, infix_fn);
     }
 };
@@ -314,8 +314,8 @@ test "test let statements" {
     const p = try Parser.init(allocator, l);
     defer p.deinit(allocator);
 
-    const program = try p.parse_program(allocator);
-    check_parser_errors(p);
+    const program = try p.parseProgram(allocator);
+    checkParserErrors(p);
     defer program.deinit(allocator);
 
     try testing.expect(program.statements.items.len == 3);
@@ -329,11 +329,11 @@ test "test let statements" {
     };
 
     for (program.statements.items, expected) |stmt, exp| {
-        try testing.expect(test_let_statement(stmt, exp.identifier));
+        try testing.expect(testLetStatement(stmt, exp.identifier));
     }
 }
 
-fn check_parser_errors(parser: *Parser) void {
+fn checkParserErrors(parser: *Parser) void {
     const errors = parser.errors;
     if (errors.items.len == 0) {
         return;
@@ -348,8 +348,8 @@ fn check_parser_errors(parser: *Parser) void {
     std.process.exit(1);
 }
 
-fn test_let_statement(s: ast.Statement, name: []const u8) bool {
-    if (!std.mem.eql(u8, s.token_literal(), "let")) {
+fn testLetStatement(s: ast.Statement, name: []const u8) bool {
+    if (!std.mem.eql(u8, s.tokenLiteral(), "let")) {
         return false;
     }
 
@@ -361,7 +361,7 @@ fn test_let_statement(s: ast.Statement, name: []const u8) bool {
     if (!std.mem.eql(u8, let_stmt.name.?.value, name)) {
         return false;
     }
-    if (!std.mem.eql(u8, let_stmt.name.?.token_literal(), name)) {
+    if (!std.mem.eql(u8, let_stmt.name.?.tokenLiteral(), name)) {
         return false;
     }
     return true;
@@ -382,15 +382,15 @@ test "test return statement" {
     const p = try Parser.init(allocator, l);
     defer p.deinit(allocator);
 
-    const program = try p.parse_program(allocator);
-    check_parser_errors(p);
+    const program = try p.parseProgram(allocator);
+    checkParserErrors(p);
     defer program.deinit(allocator);
 
     try testing.expect(program.statements.items.len == 3);
 
     for (program.statements.items) |stmt| {
         const ret_stmt: *ast.ReturnStatement = @ptrCast(@alignCast(stmt.ptr));
-        try testing.expect(std.mem.eql(u8, ret_stmt.token_literal(), "return"));
+        try testing.expect(std.mem.eql(u8, ret_stmt.tokenLiteral(), "return"));
     }
 }
 
@@ -407,8 +407,8 @@ test "test identifier expression" {
     const p = try Parser.init(allocator, l);
     defer p.deinit(allocator);
 
-    const program = try p.parse_program(allocator);
-    check_parser_errors(p);
+    const program = try p.parseProgram(allocator);
+    checkParserErrors(p);
     defer program.deinit(allocator);
 
     try testing.expect(program.statements.items.len == 1);
@@ -417,7 +417,7 @@ test "test identifier expression" {
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
     const ident: *ast.Identifier = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
-    try testing.expect(std.mem.eql(u8, ident.token_literal(), "foobar"));
+    try testing.expect(std.mem.eql(u8, ident.tokenLiteral(), "foobar"));
     try testing.expect(std.mem.eql(u8, ident.value, "foobar"));
 }
 
@@ -434,8 +434,8 @@ test "test integer literal expression" {
     const p = try Parser.init(allocator, l);
     defer p.deinit(allocator);
 
-    const program = try p.parse_program(allocator);
-    check_parser_errors(p);
+    const program = try p.parseProgram(allocator);
+    checkParserErrors(p);
     defer program.deinit(allocator);
 
     try testing.expect(program.statements.items.len == 1);
@@ -444,11 +444,11 @@ test "test integer literal expression" {
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
     const lit: *ast.IntegerLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
-    try testing.expect(std.mem.eql(u8, lit.token_literal(), "5"));
+    try testing.expect(std.mem.eql(u8, lit.tokenLiteral(), "5"));
     try testing.expect(lit.value == 5);
 }
 
-fn test_integer_literal(allocator: std.mem.Allocator, il: ast.Expression, value: i64) !bool {
+fn testIntegerLiteral(allocator: std.mem.Allocator, il: ast.Expression, value: i64) !bool {
     const integ: *ast.IntegerLiteral = @ptrCast(@alignCast(il.ptr));
 
     if (integ.value != value) {
@@ -458,7 +458,7 @@ fn test_integer_literal(allocator: std.mem.Allocator, il: ast.Expression, value:
     const integ_str = try std.fmt.allocPrint(allocator, "{d}", .{value});
     defer allocator.free(integ_str);
 
-    if (!std.mem.eql(u8, integ.token_literal(), integ_str)) {
+    if (!std.mem.eql(u8, integ.tokenLiteral(), integ_str)) {
         return false;
     }
 
@@ -484,8 +484,8 @@ test "test parsing prefix expressions" {
         const p = try Parser.init(allocator, l);
         defer p.deinit(allocator);
 
-        const program = try p.parse_program(allocator);
-        check_parser_errors(p);
+        const program = try p.parseProgram(allocator);
+        checkParserErrors(p);
         defer program.deinit(allocator);
 
         try testing.expect(program.statements.items.len == 1);
@@ -495,7 +495,7 @@ test "test parsing prefix expressions" {
 
         const prefix_expr: *ast.PrefixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
         try testing.expect(std.mem.eql(u8, prefix_expr.operator, prefix_test.operator));
-        try testing.expect(try test_integer_literal(allocator, prefix_expr.right.?, prefix_test.integer_value));
+        try testing.expect(try testIntegerLiteral(allocator, prefix_expr.right.?, prefix_test.integer_value));
     }
 }
 
@@ -518,8 +518,8 @@ test "test parsing prefix boolean expressions" {
         const p = try Parser.init(allocator, l);
         defer p.deinit(allocator);
 
-        const program = try p.parse_program(allocator);
-        check_parser_errors(p);
+        const program = try p.parseProgram(allocator);
+        checkParserErrors(p);
         defer program.deinit(allocator);
 
         try testing.expect(program.statements.items.len == 1);
@@ -529,7 +529,7 @@ test "test parsing prefix boolean expressions" {
 
         const prefix_expr: *ast.PrefixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
         try testing.expect(std.mem.eql(u8, prefix_expr.operator, prefix_test.operator));
-        try testing.expect(test_boolean_literal(prefix_expr.right.?, prefix_test.boolean_value));
+        try testing.expect(testBooleanLiteral(prefix_expr.right.?, prefix_test.boolean_value));
     }
 }
 
@@ -559,8 +559,8 @@ test "test parsing infix expressions" {
         const p = try Parser.init(allocator, l);
         defer p.deinit(allocator);
 
-        const program = try p.parse_program(allocator);
-        check_parser_errors(p);
+        const program = try p.parseProgram(allocator);
+        checkParserErrors(p);
         defer program.deinit(allocator);
 
         try testing.expect(program.statements.items.len == 1);
@@ -569,7 +569,7 @@ test "test parsing infix expressions" {
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
         const infix_expr: *ast.InfixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
-        try testing.expect(try test_infix_expression(allocator, infix_expr.expression(), infix_test.left_value, infix_test.operator, infix_test.right_value));
+        try testing.expect(try testInfixExpression(allocator, infix_expr.expression(), infix_test.left_value, infix_test.operator, infix_test.right_value));
     }
 }
 
@@ -594,8 +594,8 @@ test "test parsing infix boolean expressions" {
         const p = try Parser.init(allocator, l);
         defer p.deinit(allocator);
 
-        const program = try p.parse_program(allocator);
-        check_parser_errors(p);
+        const program = try p.parseProgram(allocator);
+        checkParserErrors(p);
         defer program.deinit(allocator);
 
         try testing.expect(program.statements.items.len == 1);
@@ -604,7 +604,7 @@ test "test parsing infix boolean expressions" {
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
         const infix_expr: *ast.InfixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
-        try testing.expect(try test_infix_expression(allocator, infix_expr.expression(), infix_test.left_value, infix_test.operator, infix_test.right_value));
+        try testing.expect(try testInfixExpression(allocator, infix_expr.expression(), infix_test.left_value, infix_test.operator, infix_test.right_value));
     }
 }
 
@@ -640,8 +640,8 @@ test "test operator precedence parsing" {
         const p = try Parser.init(allocator, l);
         defer p.deinit(allocator);
 
-        const program = try p.parse_program(allocator);
-        check_parser_errors(p);
+        const program = try p.parseProgram(allocator);
+        checkParserErrors(p);
         defer program.deinit(allocator);
 
         const program_str = try program.string();
@@ -649,36 +649,36 @@ test "test operator precedence parsing" {
     }
 }
 
-fn test_identifier(exp: ast.Expression, value: []const u8) !bool {
+fn testIdentifier(exp: ast.Expression, value: []const u8) !bool {
     const ident: *ast.Identifier = @ptrCast(@alignCast(exp.ptr));
 
     try testing.expect(std.mem.eql(u8, ident.value, value));
-    try testing.expect(std.mem.eql(u8, ident.token_literal(), value));
+    try testing.expect(std.mem.eql(u8, ident.tokenLiteral(), value));
 }
 
-fn test_boolean_literal(exp: ast.Expression, value: bool) bool {
+fn testBooleanLiteral(exp: ast.Expression, value: bool) bool {
     const boolean_exp: *ast.Boolean = @ptrCast(@alignCast(exp.ptr));
 
     if (boolean_exp.value != value) return false;
 
-    if (!std.mem.eql(u8, boolean_exp.token_literal(), if (value) "true" else "false")) return false;
+    if (!std.mem.eql(u8, boolean_exp.tokenLiteral(), if (value) "true" else "false")) return false;
 
     return true;
 }
 
-fn test_literal_expression(allocator: std.mem.Allocator, exp: ast.Expression, expected: anytype) !bool {
+fn testLiteralExpression(allocator: std.mem.Allocator, exp: ast.Expression, expected: anytype) !bool {
     switch (@TypeOf(expected)) {
-        i64 => return test_integer_literal(allocator, exp, expected),
-        []const u8 => return test_identifier(exp, expected),
-        bool => return test_boolean_literal(exp, expected),
+        i64 => return testIntegerLiteral(allocator, exp, expected),
+        []const u8 => return testIdentifier(exp, expected),
+        bool => return testBooleanLiteral(exp, expected),
         else => return false,
     }
 }
 
-fn test_infix_expression(allocator: std.mem.Allocator, exp: ast.Expression, left: anytype, operator: []const u8, right: anytype) !bool {
+fn testInfixExpression(allocator: std.mem.Allocator, exp: ast.Expression, left: anytype, operator: []const u8, right: anytype) !bool {
     const infix_exp: *ast.InfixExpression = @ptrCast(@alignCast(exp.ptr));
 
-    if (!(try test_literal_expression(allocator, infix_exp.left, left))) {
+    if (!(try testLiteralExpression(allocator, infix_exp.left, left))) {
         return false;
     }
 
@@ -686,7 +686,7 @@ fn test_infix_expression(allocator: std.mem.Allocator, exp: ast.Expression, left
         return false;
     }
 
-    if (!(try test_literal_expression(allocator, infix_exp.right.?, right))) {
+    if (!(try testLiteralExpression(allocator, infix_exp.right.?, right))) {
         return false;
     }
 
@@ -711,8 +711,8 @@ test "test boolean expression" {
         const p = try Parser.init(allocator, l);
         defer p.deinit(allocator);
 
-        const program = try p.parse_program(allocator);
-        check_parser_errors(p);
+        const program = try p.parseProgram(allocator);
+        checkParserErrors(p);
         defer program.deinit(allocator);
 
         const stmt = program.statements.items[0];

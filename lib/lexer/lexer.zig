@@ -18,11 +18,11 @@ pub const Lexer = struct {
             .read_position = 0,
             .ch = 0,
         };
-        lexer.read_char(); // Initialize the first character
+        lexer.readChar(); // Initialize the first character
         return lexer;
     }
 
-    fn read_char(self: *Lexer) void {
+    fn readChar(self: *Lexer) void {
         if (self.read_position >= self.input.len) {
             self.ch = 0; // EOF
         } else {
@@ -32,125 +32,125 @@ pub const Lexer = struct {
         self.read_position += 1;
     }
 
-    fn peek_char(self: *Lexer) u8 {
+    fn peekChar(self: *Lexer) u8 {
         if (self.read_position >= self.input.len) {
             return 0;
         }
         return self.input[self.read_position];
     }
 
-    fn read_identifier(self: *Lexer) []const u8 {
+    fn readIdentifier(self: *Lexer) []const u8 {
         const start_position = self.position;
-        while (is_letter(self.ch)) {
-            self.read_char();
+        while (isLetter(self.ch)) {
+            self.readChar();
         }
         return self.input[start_position..self.position];
     }
 
-    fn read_number(self: *Lexer) []const u8 {
+    fn readNumber(self: *Lexer) []const u8 {
         const start_position = self.position;
-        while (is_digit(self.ch)) {
-            self.read_char();
+        while (isDigit(self.ch)) {
+            self.readChar();
         }
         return self.input[start_position..self.position];
     }
 
-    fn skip_whitespace(self: *Lexer) void {
+    fn skipWhitespace(self: *Lexer) void {
         while (self.ch == ' ' or self.ch == '\t' or self.ch == '\n' or self.ch == '\r') {
-            self.read_char();
+            self.readChar();
         }
     }
 
-    pub fn next_token(self: *Lexer) Token {
+    pub fn nextToken(self: *Lexer) Token {
         var token: Token = .{ .type = .Illegal, .literal = "" };
 
-        self.skip_whitespace();
+        self.skipWhitespace();
 
         switch (self.ch) {
             '=' => {
-                if (self.peek_char() == '=') {
-                    self.read_char();
-                    token = new_token(.Eq, "==");
+                if (self.peekChar() == '=') {
+                    self.readChar();
+                    token = newToken(.Eq, "==");
                 } else {
-                    token = new_token(.Assign, "=");
+                    token = newToken(.Assign, "=");
                 }
             },
             ';' => {
-                token = new_token(.Semicolon, ";");
+                token = newToken(.Semicolon, ";");
             },
             '(' => {
-                token = new_token(.LParen, "(");
+                token = newToken(.LParen, "(");
             },
             ')' => {
-                token = new_token(.RParen, ")");
+                token = newToken(.RParen, ")");
             },
             ',' => {
-                token = new_token(.Comma, ",");
+                token = newToken(.Comma, ",");
             },
             '+' => {
-                token = new_token(.Plus, "+");
+                token = newToken(.Plus, "+");
             },
             '-' => {
-                token = new_token(.Minus, "-");
+                token = newToken(.Minus, "-");
             },
             '!' => {
-                if (self.peek_char() == '=') {
-                    self.read_char();
-                    token = new_token(.NotEq, "!=");
+                if (self.peekChar() == '=') {
+                    self.readChar();
+                    token = newToken(.NotEq, "!=");
                 } else {
-                    token = new_token(.Bang, "!");
+                    token = newToken(.Bang, "!");
                 }
             },
             '/' => {
-                token = new_token(.Slash, "/");
+                token = newToken(.Slash, "/");
             },
             '*' => {
-                token = new_token(.Asterisk, "*");
+                token = newToken(.Asterisk, "*");
             },
             '<' => {
-                token = new_token(.LessThan, "<");
+                token = newToken(.LessThan, "<");
             },
             '>' => {
-                token = new_token(.GreaterThan, ">");
+                token = newToken(.GreaterThan, ">");
             },
             '{' => {
-                token = new_token(.LBrace, "{");
+                token = newToken(.LBrace, "{");
             },
             '}' => {
-                token = new_token(.RBrace, "}");
+                token = newToken(.RBrace, "}");
             },
             0 => {
-                token = new_token(.Eof, "");
+                token = newToken(.Eof, "");
             },
             else => {
-                if (is_letter(self.ch)) {
-                    token.literal = self.read_identifier();
-                    token.type = tok.lookup_identifier(token.literal);
+                if (isLetter(self.ch)) {
+                    token.literal = self.readIdentifier();
+                    token.type = tok.lookupIdentifier(token.literal);
                     return token;
-                } else if (is_digit(self.ch)) {
-                    token.literal = self.read_number();
+                } else if (isDigit(self.ch)) {
+                    token.literal = self.readNumber();
                     token.type = .Int;
                     return token;
                 } else {
-                    token = new_token(.Illegal, "");
+                    token = newToken(.Illegal, "");
                 }
             },
         }
 
-        self.read_char();
+        self.readChar();
         return token;
     }
 };
 
-fn new_token(token_type: TokenType, literal: []const u8) Token {
+fn newToken(token_type: TokenType, literal: []const u8) Token {
     return .{ .type = token_type, .literal = literal };
 }
 
-fn is_letter(ch: u8) bool {
+fn isLetter(ch: u8) bool {
     return (ch >= 'a' and ch <= 'z') or (ch >= 'A' and ch <= 'Z') or (ch == '_');
 }
 
-fn is_digit(ch: u8) bool {
+fn isDigit(ch: u8) bool {
     return '0' <= ch and ch <= '9';
 }
 
@@ -260,7 +260,7 @@ test "test next token" {
     defer std.testing.allocator.destroy(l);
 
     for (expected) |e| {
-        const token = l.next_token();
+        const token = l.nextToken();
 
         try testing.expectEqual(e.expected_type, token.type);
         try testing.expectEqualStrings(e.expected_literal, token.literal);

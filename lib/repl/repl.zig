@@ -19,7 +19,7 @@ pub fn start(
             defer allocator.destroy(l);
 
             while (true) {
-                const token = l.next_token();
+                const token = l.NextToken();
                 if (token.type == .Eof) break;
 
                 try stdout.print("{any}\n", .{token});

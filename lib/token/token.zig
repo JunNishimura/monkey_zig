@@ -84,6 +84,6 @@ const Keywords = std.StaticStringMap(TokenType).initComptime(.{
     .{ "return", .Return },
 });
 
-pub fn lookup_identifier(ident: []const u8) TokenType {
+pub fn lookupIdentifier(ident: []const u8) TokenType {
     return Keywords.get(ident) orelse .Ident;
 }

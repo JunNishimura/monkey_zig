@@ -13,9 +13,9 @@ const Node = struct {
         const ptr_info = @typeInfo(T);
 
         const gen = struct {
-            pub fn token_literal(pointer: *anyopaque) []const u8 {
+            pub fn tokenLiteral(pointer: *anyopaque) []const u8 {
                 const self: T = @ptrCast(@alignCast(pointer));
-                return ptr_info.pointer.child.token_literal(self);
+                return ptr_info.pointer.child.tokenLiteral(self);
             }
 
             pub fn string(pointer: *anyopaque) ![]const u8 {
@@ -31,13 +31,13 @@ const Node = struct {
 
         return .{
             .ptr = ptr,
-            .token_literal_fn = gen.token_literal,
+            .token_literal_fn = gen.tokenLiteral,
             .string_fn = gen.string,
             .deinit_fn = gen.deinit,
         };
     }
 
-    fn token_literal(self: Node) []const u8 {
+    fn tokenLiteral(self: Node) []const u8 {
         return self.token_literal_fn(self.ptr);
     }
 
@@ -60,20 +60,20 @@ pub const Statement = struct {
         const ptr_info = @typeInfo(T);
 
         const gen = struct {
-            pub fn statement_node(pointer: *anyopaque) void {
+            pub fn statementNode(pointer: *anyopaque) void {
                 const self: T = @ptrCast(@alignCast(pointer));
-                return ptr_info.pointer.child.statement_node(self);
+                return ptr_info.pointer.child.statementNode(self);
             }
         };
 
         return .{
             .ptr = ptr,
-            .statement_node_fn = gen.statement_node,
+            .statement_node_fn = gen.statementNode,
             .node = Node.init(ptr),
         };
     }
 
-    pub fn statement_node(self: Statement) void {
+    pub fn statementNode(self: Statement) void {
         self.statement_node_fn(self.ptr);
     }
 
@@ -81,8 +81,8 @@ pub const Statement = struct {
         self.node.deinit(allocator);
     }
 
-    pub fn token_literal(self: Statement) []const u8 {
-        return self.node.token_literal();
+    pub fn tokenLiteral(self: Statement) []const u8 {
+        return self.node.tokenLiteral();
     }
 
     pub fn string(self: Statement) ![]const u8 {
@@ -100,25 +100,25 @@ pub const Expression = struct {
         const ptr_info = @typeInfo(T);
 
         const gen = struct {
-            pub fn expression_node(pointer: *anyopaque) void {
+            pub fn expressionNode(pointer: *anyopaque) void {
                 const self: T = @ptrCast(@alignCast(pointer));
-                return ptr_info.pointer.child.expression_node(self);
+                return ptr_info.pointer.child.expressionNode(self);
             }
         };
 
         return .{
             .ptr = ptr,
-            .expression_node_fn = gen.expression_node,
+            .expression_node_fn = gen.expressionNode,
             .node = Node.init(ptr),
         };
     }
 
-    fn expression_node(self: Expression) void {
+    fn expressionNode(self: Expression) void {
         self.expression_node_fn(self.ptr);
     }
 
-    fn token_literal(self: Expression) []const u8 {
-        return self.node.token_literal();
+    fn tokenLiteral(self: Expression) []const u8 {
+        return self.node.tokenLiteral();
     }
 
     fn deinit(self: Expression, allocator: std.mem.Allocator) void {
@@ -134,9 +134,9 @@ pub const Program = struct {
     statements: std.ArrayList(Statement),
     str_list: std.ArrayList(u8),
 
-    fn token_literal(self: *Program) []const u8 {
+    fn tokenLiteral(self: *Program) []const u8 {
         if (self.statements.len > 0) {
-            return self.statements[0].token_literal();
+            return self.statements[0].tokenLiteral();
         }
         return "";
     }
@@ -178,14 +178,14 @@ pub const LetStatement = struct {
     value: ?Expression,
     str_list: std.ArrayList(u8),
 
-    fn token_literal(self: *LetStatement) []const u8 {
+    fn tokenLiteral(self: *LetStatement) []const u8 {
         return self.token.literal;
     }
 
-    fn statement_node(_: *LetStatement) void {}
+    fn statementNode(_: *LetStatement) void {}
 
     fn string(self: *LetStatement) ![]const u8 {
-        try self.str_list.appendSlice(self.token_literal());
+        try self.str_list.appendSlice(self.tokenLiteral());
         try self.str_list.appendSlice(" ");
         if (self.name) |n| {
             const name_str = try n.string();
@@ -233,14 +233,14 @@ pub const ReturnStatement = struct {
     return_value: ?Expression,
     str_list: std.ArrayList(u8),
 
-    pub fn token_literal(self: *ReturnStatement) []const u8 {
+    pub fn tokenLiteral(self: *ReturnStatement) []const u8 {
         return self.token.literal;
     }
 
-    fn statement_node(_: *ReturnStatement) void {}
+    fn statementNode(_: *ReturnStatement) void {}
 
     fn string(self: *ReturnStatement) ![]const u8 {
-        try self.str_list.appendSlice(self.token_literal());
+        try self.str_list.appendSlice(self.tokenLiteral());
         try self.str_list.appendSlice(" ");
         if (self.return_value) |rv| {
             const return_value_str = try rv.string();
@@ -276,8 +276,8 @@ pub const ExpressionStatement = struct {
     token: Token,
     expression: ?Expression,
 
-    fn statement_node(_: *ExpressionStatement) void {}
-    fn token_literal(self: *ExpressionStatement) []const u8 {
+    fn statementNode(_: *ExpressionStatement) void {}
+    fn tokenLiteral(self: *ExpressionStatement) []const u8 {
         return self.token.literal;
     }
     fn deinit(self: *ExpressionStatement, allocator: std.mem.Allocator) void {
@@ -314,9 +314,9 @@ pub const PrefixExpression = struct {
     right: ?Expression,
     str_list: std.ArrayList(u8),
 
-    fn expression_node(_: *PrefixExpression) void {}
+    fn expressionNode(_: *PrefixExpression) void {}
 
-    pub fn token_literal(self: *PrefixExpression) []const u8 {
+    pub fn tokenLiteral(self: *PrefixExpression) []const u8 {
         return self.token.literal;
     }
 
@@ -364,9 +364,9 @@ pub const InfixExpression = struct {
     right: ?Expression,
     str_list: std.ArrayList(u8),
 
-    fn expression_node(_: *InfixExpression) void {}
+    fn expressionNode(_: *InfixExpression) void {}
 
-    fn token_literal(self: *InfixExpression) []const u8 {
+    fn tokenLiteral(self: *InfixExpression) []const u8 {
         return self.token.literal;
     }
 
@@ -414,10 +414,10 @@ pub const Identifier = struct {
     token: Token,
     value: []const u8,
 
-    pub fn token_literal(self: *Identifier) []const u8 {
+    pub fn tokenLiteral(self: *Identifier) []const u8 {
         return self.token.literal;
     }
-    fn expression_node(_: *Identifier) void {}
+    fn expressionNode(_: *Identifier) void {}
     pub fn deinit(self: *Identifier, allocator: std.mem.Allocator) void {
         allocator.destroy(self);
     }
@@ -443,11 +443,11 @@ pub const IntegerLiteral = struct {
     token: Token,
     value: ?i64,
 
-    pub fn token_literal(self: *IntegerLiteral) []const u8 {
+    pub fn tokenLiteral(self: *IntegerLiteral) []const u8 {
         return self.token.literal;
     }
 
-    fn expression_node(_: *IntegerLiteral) void {}
+    fn expressionNode(_: *IntegerLiteral) void {}
 
     pub fn deinit(self: *IntegerLiteral, allocator: std.mem.Allocator) void {
         allocator.destroy(self);
@@ -475,11 +475,11 @@ pub const Boolean = struct {
     token: Token,
     value: bool,
 
-    pub fn token_literal(self: *Boolean) []const u8 {
+    pub fn tokenLiteral(self: *Boolean) []const u8 {
         return self.token.literal;
     }
 
-    fn expression_node(_: *Boolean) void {}
+    fn expressionNode(_: *Boolean) void {}
 
     pub fn string(self: *Boolean) ![]const u8 {
         return self.token.literal;
