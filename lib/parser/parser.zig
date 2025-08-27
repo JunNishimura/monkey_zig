@@ -4,7 +4,7 @@ const lexer = @import("lexer");
 const tok = @import("token");
 const ast = @import("ast");
 
-const PrefixParseFn = *const fn (*Parser, std.mem.Allocator) anyerror!ast.Expression;
+const PrefixParseFn = *const fn (*Parser, std.mem.Allocator) anyerror!?ast.Expression;
 const InfixParseFn = *const fn (*Parser, std.mem.Allocator, ast.Expression) anyerror!ast.Expression;
 
 const Precedence = enum {
@@ -68,6 +68,7 @@ const Parser = struct {
         try p.registerPrefix(.False, parseBoolean);
         try p.registerPrefix(.Bang, parsePrefixExpression);
         try p.registerPrefix(.Minus, parsePrefixExpression);
+        try p.registerPrefix(.LParen, parseGroupExpression);
         try p.registerInfix(.Plus, parseInfixExpression);
         try p.registerInfix(.Minus, parseInfixExpression);
         try p.registerInfix(.Asterisk, parseInfixExpression);
@@ -146,7 +147,7 @@ const Parser = struct {
         return let_stmt;
     }
 
-    fn parseIdentifier(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+    fn parseIdentifier(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
         return (try ast.Identifier.init(allocator, self.cur_token, self.cur_token.literal)).expression();
     }
 
@@ -179,7 +180,7 @@ const Parser = struct {
 
             self.nextToken();
 
-            left_exp = try infix.?(self, allocator, left_exp);
+            left_exp = try infix.?(self, allocator, left_exp.?);
         }
 
         return left_exp;
@@ -197,7 +198,7 @@ const Parser = struct {
         return exp_stmt;
     }
 
-    fn parseIntegerLiteral(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+    fn parseIntegerLiteral(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
         const lit = try ast.IntegerLiteral.init(allocator, self.cur_token);
 
         const int_value = try std.fmt.parseInt(i64, self.cur_token.literal, 10);
@@ -206,11 +207,11 @@ const Parser = struct {
         return lit.expression();
     }
 
-    fn parseBoolean(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+    fn parseBoolean(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
         return (try ast.Boolean.init(allocator, self.cur_token, self.curTokenIs(.True))).expression();
     }
 
-    fn parsePrefixExpression(self: *Parser, allocator: std.mem.Allocator) !ast.Expression {
+    fn parsePrefixExpression(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
         const prefix_exp = try ast.PrefixExpression.init(allocator, self.cur_token, self.cur_token.literal);
 
         self.nextToken();
@@ -218,6 +219,18 @@ const Parser = struct {
         prefix_exp.right = try self.parseExpression(allocator, .Prefix);
 
         return prefix_exp.expression();
+    }
+
+    fn parseGroupExpression(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
+        self.nextToken();
+
+        const exp = try self.parseExpression(allocator, .Lowest);
+
+        if (!(try self.expectPeek(allocator, .RParen))) {
+            return null;
+        }
+
+        return exp;
     }
 
     fn parseInfixExpression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !ast.Expression {
@@ -571,6 +584,11 @@ test "test operator precedence parsing" {
         .{ .input = "false", .expected = "false" },
         .{ .input = "3 > 5 == false", .expected = "((3 > 5) == false)" },
         .{ .input = "3 < 5 == true", .expected = "((3 < 5) == true)" },
+        .{ .input = "1 + (2 + 3) + 4", .expected = "((1 + (2 + 3)) + 4)" },
+        .{ .input = "(5 + 5) * 2", .expected = "((5 + 5) * 2)" },
+        .{ .input = "2 / (5 + 5)", .expected = "(2 / (5 + 5))" },
+        .{ .input = "-(5 + 5)", .expected = "(-(5 + 5))" },
+        .{ .input = "!(true == true)", .expected = "(!(true == true))" },
     };
 
     for (precedence_tests) |precedence_test| {
