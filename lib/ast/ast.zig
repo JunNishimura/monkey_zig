@@ -308,6 +308,49 @@ pub const ExpressionStatement = struct {
     }
 };
 
+pub const BlockStatement = struct {
+    token: Token,
+    statements: std.ArrayList(Statement),
+    str_list: std.ArrayList(u8),
+
+    fn statementNode(_: *BlockStatement) void {}
+
+    pub fn tokenLiteral(self: *BlockStatement) []const u8 {
+        return self.token.literal;
+    }
+
+    pub fn string(self: *BlockStatement) ![]const u8 {
+        for (self.statements.items) |stmt| {
+            try self.str_list.appendSlice(try stmt.string());
+        }
+
+        return self.str_list.items;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token) !*BlockStatement {
+        const block = try allocator.create(BlockStatement);
+        block.* = .{
+            .token = token,
+            .statements = std.ArrayList(Statement).init(allocator),
+            .str_list = std.ArrayList(u8).init(allocator),
+        };
+        return block;
+    }
+
+    pub fn deinit(self: *BlockStatement, allocator: std.mem.Allocator) void {
+        for (self.statements.items) |stmt| {
+            stmt.deinit(allocator);
+        }
+        self.statements.deinit();
+        self.str_list.deinit();
+        allocator.destroy(self);
+    }
+
+    pub fn statement(self: *BlockStatement) Statement {
+        return Statement.init(self);
+    }
+};
+
 pub const PrefixExpression = struct {
     token: Token,
     operator: []const u8,
@@ -407,6 +450,67 @@ pub const InfixExpression = struct {
             r.deinit(allocator);
         }
         allocator.destroy(self);
+    }
+};
+
+pub const IfExpression = struct {
+    token: Token,
+    condition: ?Expression,
+    consequence: ?*BlockStatement,
+    alternative: ?*BlockStatement,
+    str_list: std.ArrayList(u8),
+
+    fn expressionNode(_: *IfExpression) void {}
+
+    fn tokenLiteral(self: *IfExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    fn string(self: *IfExpression) ![]const u8 {
+        try self.str_list.appendSlice("if");
+        try self.str_list.appendSlice(try self.condition.?.string());
+        try self.str_list.appendSlice(" ");
+        try self.str_list.appendSlice(try self.consequence.?.string());
+
+        if (self.alternative) |alt| {
+            try self.str_list.appendSlice("else ");
+            try self.str_list.appendSlice(try alt.string());
+        }
+
+        return self.str_list.items;
+    }
+
+    pub fn init(
+        allocator: std.mem.Allocator,
+        token: Token,
+    ) !*IfExpression {
+        const if_exp = try allocator.create(IfExpression);
+        if_exp.* = .{
+            .token = token,
+            .condition = null,
+            .consequence = null,
+            .alternative = null,
+            .str_list = std.ArrayList(u8).init(allocator),
+        };
+        return if_exp;
+    }
+
+    pub fn deinit(self: *IfExpression, allocator: std.mem.Allocator) void {
+        self.str_list.deinit();
+        if (self.condition) |cond| {
+            cond.deinit(allocator);
+        }
+        if (self.consequence) |cons| {
+            cons.deinit(allocator);
+        }
+        if (self.alternative) |alt| {
+            alt.deinit(allocator);
+        }
+        allocator.destroy(self);
+    }
+
+    pub fn expression(self: *IfExpression) Expression {
+        return Expression.init(self);
     }
 };
 
