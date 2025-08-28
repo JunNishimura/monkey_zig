@@ -69,6 +69,7 @@ const Parser = struct {
         try p.registerPrefix(.Bang, parsePrefixExpression);
         try p.registerPrefix(.Minus, parsePrefixExpression);
         try p.registerPrefix(.LParen, parseGroupExpression);
+        try p.registerPrefix(.If, parseIfExpression);
         try p.registerInfix(.Plus, parseInfixExpression);
         try p.registerInfix(.Minus, parseInfixExpression);
         try p.registerInfix(.Asterisk, parseInfixExpression);
@@ -163,6 +164,24 @@ const Parser = struct {
         return return_stmt;
     }
 
+    fn parseBlockStatement(self: *Parser, allocator: std.mem.Allocator) !*ast.BlockStatement {
+        const block_stmt = try ast.BlockStatement.init(allocator, self.cur_token);
+
+        self.nextToken();
+
+        while (!self.curTokenIs(.RBrace) and !self.curTokenIs(.Eof)) {
+            const stmt = try self.parseStatement(allocator);
+
+            if (stmt) |s| {
+                try block_stmt.statements.append(s);
+            }
+
+            self.nextToken();
+        }
+
+        return block_stmt;
+    }
+
     fn parseExpression(self: *Parser, allocator: std.mem.Allocator, precedence: Precedence) !?ast.Expression {
         const prefix = self.prefix_parse_fns.get(self.cur_token.type);
         if (prefix == null) {
@@ -231,6 +250,39 @@ const Parser = struct {
         }
 
         return exp;
+    }
+
+    fn parseIfExpression(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
+        const if_exp = try ast.IfExpression.init(allocator, self.cur_token);
+
+        if (!(try self.expectPeek(allocator, .LParen))) {
+            return null;
+        }
+
+        self.nextToken();
+        if_exp.condition = try self.parseExpression(allocator, .Lowest);
+
+        if (!(try self.expectPeek(allocator, .RParen))) {
+            return null;
+        }
+
+        if (!(try self.expectPeek(allocator, .LBrace))) {
+            return null;
+        }
+
+        if_exp.consequence = try self.parseBlockStatement(allocator);
+
+        if (self.peekTokenIs(.Else)) {
+            self.nextToken();
+
+            if (!(try self.expectPeek(allocator, .LBrace))) {
+                return null;
+            }
+
+            if_exp.alternative = try self.parseBlockStatement(allocator);
+        }
+
+        return if_exp.expression();
     }
 
     fn parseInfixExpression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !ast.Expression {
@@ -652,7 +704,7 @@ fn testPrefixExpression(allocator: std.mem.Allocator, exp: ast.Expression, opera
     return true;
 }
 
-fn testInfixExpression(allocator: std.mem.Allocator, exp: ast.Expression, left: anytype, operator: []const u8, right: anytype) !bool {
+fn testInfixExpression(allocator: std.mem.Allocator, exp: ast.Expression, left: TestLiteralValue, operator: []const u8, right: TestLiteralValue) !bool {
     const infix_exp: *ast.InfixExpression = @ptrCast(@alignCast(exp.ptr));
 
     if (!(try testLiteralExpression(allocator, infix_exp.left, left))) {
@@ -698,4 +750,67 @@ test "test boolean expression" {
         const boolean_exp: *ast.Boolean = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
         try testing.expect(boolean_exp.value == boolean_test.expected);
     }
+}
+
+test "test if expression" {
+    const input = "if (x < y) { x }";
+
+    const allocator = testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit(allocator);
+
+    const program = try p.parseProgram(allocator);
+    checkParserErrors(p);
+    defer program.deinit(allocator);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+    const if_exp: *ast.IfExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+
+    try testing.expect(try testInfixExpression(allocator, if_exp.condition.?, .{ .string = "x" }, "<", .{ .string = "y" }));
+    try testing.expect(if_exp.consequence.?.statements.items.len == 1);
+
+    const consequence_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.consequence.?.statements.items[0].ptr));
+    try testing.expect(testIdentifier(consequence_stmt.expression.?, "x"));
+
+    try testing.expect(if_exp.alternative == null);
+}
+
+test "test if else expression" {
+    const input = "if (x < y) { x } else { y }";
+
+    const allocator = testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit(allocator);
+
+    const program = try p.parseProgram(allocator);
+    checkParserErrors(p);
+    defer program.deinit(allocator);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+    const if_exp: *ast.IfExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+
+    try testing.expect(try testInfixExpression(allocator, if_exp.condition.?, .{ .string = "x" }, "<", .{ .string = "y" }));
+    try testing.expect(if_exp.consequence.?.statements.items.len == 1);
+
+    const consequence_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.consequence.?.statements.items[0].ptr));
+    try testing.expect(testIdentifier(consequence_stmt.expression.?, "x"));
+
+    try testing.expect(if_exp.alternative.?.statements.items.len == 1);
+
+    const alternative_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.alternative.?.statements.items[0].ptr));
+    try testing.expect(testIdentifier(alternative_stmt.expression.?, "y"));
 }
