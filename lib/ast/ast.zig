@@ -480,10 +480,7 @@ pub const IfExpression = struct {
         return self.str_list.items;
     }
 
-    pub fn init(
-        allocator: std.mem.Allocator,
-        token: Token,
-    ) !*IfExpression {
+    pub fn init(allocator: std.mem.Allocator, token: Token) !*IfExpression {
         const if_exp = try allocator.create(IfExpression);
         if_exp.* = .{
             .token = token,
@@ -603,6 +600,60 @@ pub const Boolean = struct {
     }
 
     pub fn expression(self: *Boolean) Expression {
+        return Expression.init(self);
+    }
+};
+
+pub const FunctionLiteral = struct {
+    token: Token,
+    parameters: std.ArrayList(*Identifier),
+    body: ?*BlockStatement,
+    str_list: std.ArrayList(u8),
+
+    fn expressionNode(_: *FunctionLiteral) void {}
+
+    fn tokenLiteral(self: *FunctionLiteral) []const u8 {
+        return self.token.literal;
+    }
+
+    fn string(self: *FunctionLiteral) ![]const u8 {
+        try self.str_list.appendSlice(self.tokenLiteral());
+        try self.str_list.appendSlice("(");
+        for (self.parameters.items, 0..) |param, index| {
+            if (index > 0) {
+                try self.str_list.appendSlice(", ");
+            }
+            try self.str_list.appendSlice(try param.string());
+        }
+        try self.str_list.appendSlice(") ");
+        try self.str_list.appendSlice(try self.body.?.string());
+        return self.str_list.items;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token) !*FunctionLiteral {
+        const lit = try allocator.create(FunctionLiteral);
+        lit.* = .{
+            .token = token,
+            .parameters = std.ArrayList(*Identifier).init(allocator),
+            .body = null,
+            .str_list = std.ArrayList(u8).init(allocator),
+        };
+        return lit;
+    }
+
+    pub fn deinit(self: *FunctionLiteral, allocator: std.mem.Allocator) void {
+        self.str_list.deinit();
+        for (self.parameters.items) |param| {
+            param.deinit(allocator);
+        }
+        self.parameters.deinit();
+        if (self.body) |body| {
+            body.deinit(allocator);
+        }
+        allocator.destroy(self);
+    }
+
+    pub fn expression(self: *FunctionLiteral) Expression {
         return Expression.init(self);
     }
 };
