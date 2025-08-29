@@ -70,6 +70,7 @@ const Parser = struct {
         try p.registerPrefix(.Minus, parsePrefixExpression);
         try p.registerPrefix(.LParen, parseGroupExpression);
         try p.registerPrefix(.If, parseIfExpression);
+        try p.registerPrefix(.Function, parseFunctionLiteral);
         try p.registerInfix(.Plus, parseInfixExpression);
         try p.registerInfix(.Minus, parseInfixExpression);
         try p.registerInfix(.Asterisk, parseInfixExpression);
@@ -283,6 +284,56 @@ const Parser = struct {
         }
 
         return if_exp.expression();
+    }
+
+    fn parseFunctionParameters(self: *Parser, allocator: std.mem.Allocator) !?std.ArrayList(*ast.Identifier) {
+        var params = std.ArrayList(*ast.Identifier).init(allocator);
+
+        if (self.peekTokenIs(.RParen)) {
+            self.nextToken();
+            return params;
+        }
+
+        self.nextToken();
+
+        const param = try ast.Identifier.init(allocator, self.cur_token, self.cur_token.literal);
+        try params.append(param);
+
+        while (self.peekTokenIs(.Comma)) {
+            self.nextToken();
+            self.nextToken();
+
+            const other_param = try ast.Identifier.init(allocator, self.cur_token, self.cur_token.literal);
+            try params.append(other_param);
+        }
+
+        if (!(try self.expectPeek(allocator, .RParen))) {
+            return null;
+        }
+
+        return params;
+    }
+
+    fn parseFunctionLiteral(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
+        const func_literal = try ast.FunctionLiteral.init(allocator, self.cur_token);
+
+        if (!(try self.expectPeek(allocator, .LParen))) {
+            return null;
+        }
+
+        if (try self.parseFunctionParameters(allocator)) |params| {
+            func_literal.parameters = params;
+        } else {
+            return null;
+        }
+
+        if (!(try self.expectPeek(allocator, .LBrace))) {
+            return null;
+        }
+
+        func_literal.body = try self.parseBlockStatement(allocator);
+
+        return func_literal.expression();
     }
 
     fn parseInfixExpression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !ast.Expression {
@@ -813,4 +864,69 @@ test "test if else expression" {
 
     const alternative_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.alternative.?.statements.items[0].ptr));
     try testing.expect(testIdentifier(alternative_stmt.expression.?, "y"));
+}
+
+test "test function literal parsing" {
+    const input = "fn(x, y) { x + y; }";
+
+    const allocator = testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit(allocator);
+
+    const program = try p.parseProgram(allocator);
+    checkParserErrors(p);
+    defer program.deinit(allocator);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+    const func_literal: *ast.FunctionLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    try testing.expect(func_literal.parameters.items.len == 2);
+
+    try testing.expect(try testLiteralExpression(allocator, func_literal.parameters.items[0].expression(), .{ .string = "x" }));
+    try testing.expect(try testLiteralExpression(allocator, func_literal.parameters.items[1].expression(), .{ .string = "y" }));
+
+    try testing.expect(func_literal.body.?.statements.items.len == 1);
+
+    const body_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(func_literal.body.?.statements.items[0].ptr));
+    try testing.expect(try testInfixExpression(allocator, body_stmt.expression.?, .{ .string = "x" }, "+", .{ .string = "y" }));
+}
+
+test "test function parameter parsing" {
+    const param_tests = [_]struct {
+        input: []const u8,
+        expected_params: []const u8,
+    }{
+        .{ .input = "fn() {};", .expected_params = "" },
+        .{ .input = "fn(x) {};", .expected_params = "x" },
+        .{ .input = "fn(x, y, z) {};", .expected_params = "xyz" },
+    };
+
+    for (param_tests) |param_test| {
+        const allocator = testing.allocator;
+
+        const l = try lexer.Lexer.init(allocator, param_test.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit(allocator);
+
+        const program = try p.parseProgram(allocator);
+        checkParserErrors(p);
+        defer program.deinit(allocator);
+
+        const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+        const func_literal: *ast.FunctionLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+
+        try testing.expect(func_literal.parameters.items.len == param_test.expected_params.len);
+        for (func_literal.parameters.items, 0..) |param, index| {
+            const expected = param_test.expected_params[index];
+            try testing.expect(try testLiteralExpression(allocator, param.expression(), .{ .string = (&[_]u8{expected})[0..] }));
+        }
+    }
 }
