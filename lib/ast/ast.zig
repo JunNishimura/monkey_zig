@@ -658,6 +658,58 @@ pub const FunctionLiteral = struct {
     }
 };
 
+pub const CallExpression = struct {
+    token: Token,
+    function: Expression,
+    arguments: std.ArrayList(Expression),
+    str_list: std.ArrayList(u8),
+
+    fn expressionNode(_: *CallExpression) void {}
+
+    fn tokenLiteral(self: *CallExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    fn string(self: *CallExpression) ![]const u8 {
+        try self.str_list.appendSlice(try self.function.string());
+        try self.str_list.appendSlice("(");
+        for (self.arguments.items, 0..) |arg, index| {
+            if (index > 0) {
+                try self.str_list.appendSlice(", ");
+            }
+            try self.str_list.appendSlice(try arg.string());
+        }
+        try self.str_list.appendSlice(")");
+
+        return self.str_list.items;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token, function: Expression) !*CallExpression {
+        const call_exp = try allocator.create(CallExpression);
+        call_exp.* = .{
+            .token = token,
+            .function = function,
+            .arguments = std.ArrayList(Expression).init(allocator),
+            .str_list = std.ArrayList(u8).init(allocator),
+        };
+        return call_exp;
+    }
+
+    fn deinit(self: *CallExpression, allocator: std.mem.Allocator) void {
+        self.str_list.deinit();
+        self.function.deinit(allocator);
+        for (self.arguments.items) |arg| {
+            arg.deinit(allocator);
+        }
+        self.arguments.deinit();
+        allocator.destroy(self);
+    }
+
+    pub fn expression(self: *CallExpression) Expression {
+        return Expression.init(self);
+    }
+};
+
 test "test string" {
     const allocator = testing.allocator;
 
