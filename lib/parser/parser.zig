@@ -5,7 +5,7 @@ const tok = @import("token");
 const ast = @import("ast");
 
 const PrefixParseFn = *const fn (*Parser, std.mem.Allocator) anyerror!?ast.Expression;
-const InfixParseFn = *const fn (*Parser, std.mem.Allocator, ast.Expression) anyerror!ast.Expression;
+const InfixParseFn = *const fn (*Parser, std.mem.Allocator, ast.Expression) anyerror!?ast.Expression;
 
 const Precedence = enum {
     Lowest,
@@ -42,6 +42,7 @@ const Precedences = std.StaticStringMap(Precedence).initComptime(.{
     .{ tok.TokenType.Minus.string(), Precedence.Sum },
     .{ tok.TokenType.Asterisk.string(), Precedence.Product },
     .{ tok.TokenType.Slash.string(), Precedence.Product },
+    .{ tok.TokenType.LParen.string(), Precedence.Call },
 });
 
 const Parser = struct {
@@ -79,6 +80,7 @@ const Parser = struct {
         try p.registerInfix(.NotEq, parseInfixExpression);
         try p.registerInfix(.LessThan, parseInfixExpression);
         try p.registerInfix(.GreaterThan, parseInfixExpression);
+        try p.registerInfix(.LParen, parseCallExpression);
 
         p.nextToken();
         p.nextToken();
@@ -336,7 +338,7 @@ const Parser = struct {
         return func_literal.expression();
     }
 
-    fn parseInfixExpression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !ast.Expression {
+    fn parseInfixExpression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !?ast.Expression {
         const infix_exp = try ast.InfixExpression.init(
             allocator,
             self.cur_token,
@@ -349,6 +351,50 @@ const Parser = struct {
         infix_exp.right = try self.parseExpression(allocator, precedence);
 
         return infix_exp.expression();
+    }
+
+    fn parseCallArguments(self: *Parser, allocator: std.mem.Allocator) !?std.ArrayList(ast.Expression) {
+        var args = std.ArrayList(ast.Expression).init(allocator);
+
+        if (self.peekTokenIs(.RParen)) {
+            self.nextToken();
+            return args;
+        }
+
+        self.nextToken();
+        const arg = try self.parseExpression(allocator, .Lowest);
+        if (arg) |a| {
+            try args.append(a);
+        } else {
+            return null;
+        }
+
+        while (self.peekTokenIs(.Comma)) {
+            self.nextToken();
+            self.nextToken();
+            const other_arg = try self.parseExpression(allocator, .Lowest);
+            if (other_arg) |a| {
+                try args.append(a);
+            } else {
+                return null;
+            }
+        }
+
+        if (!(try self.expectPeek(allocator, .RParen))) {
+            return null;
+        }
+
+        return args;
+    }
+
+    fn parseCallExpression(self: *Parser, allocator: std.mem.Allocator, function: ast.Expression) !?ast.Expression {
+        const exp = try ast.CallExpression.init(allocator, self.cur_token, function);
+        if (try self.parseCallArguments(allocator)) |args| {
+            exp.arguments = args;
+        } else {
+            return null;
+        }
+        return exp.expression();
     }
 
     fn parseStatement(self: *Parser, allocator: std.mem.Allocator) !?ast.Statement {
@@ -692,6 +738,9 @@ test "test operator precedence parsing" {
         .{ .input = "2 / (5 + 5)", .expected = "(2 / (5 + 5))" },
         .{ .input = "-(5 + 5)", .expected = "(-(5 + 5))" },
         .{ .input = "!(true == true)", .expected = "(!(true == true))" },
+        .{ .input = "a + add(b * c) + d", .expected = "((a + add((b * c))) + d)" },
+        .{ .input = "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))", .expected = "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))" },
+        .{ .input = "add(a + b + c * d / f + g)", .expected = "add((((a + b) + ((c * d) / f)) + g))" },
     };
 
     for (precedence_tests) |precedence_test| {
@@ -929,4 +978,33 @@ test "test function parameter parsing" {
             try testing.expect(try testLiteralExpression(allocator, param.expression(), .{ .string = (&[_]u8{expected})[0..] }));
         }
     }
+}
+
+test "test call expression parsing" {
+    const input = "add(1, 2 * 3, 4 + 5)";
+
+    const allocator = testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit(allocator);
+
+    const program = try p.parseProgram(allocator);
+    checkParserErrors(p);
+    defer program.deinit(allocator);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+    const call_exp: *ast.CallExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    try testing.expect(testIdentifier(call_exp.function, "add"));
+
+    try testing.expect(call_exp.arguments.items.len == 3);
+
+    try testing.expect(try testLiteralExpression(allocator, call_exp.arguments.items[0], .{ .integer = 1 }));
+    try testing.expect(try testInfixExpression(allocator, call_exp.arguments.items[1], .{ .integer = 2 }, "*", .{ .integer = 3 }));
+    try testing.expect(try testInfixExpression(allocator, call_exp.arguments.items[2], .{ .integer = 4 }, "+", .{ .integer = 5 }));
 }
