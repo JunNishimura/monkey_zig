@@ -144,7 +144,11 @@ const Parser = struct {
             return null;
         }
 
-        while (!self.curTokenIs(.Semicolon)) {
+        self.nextToken();
+
+        let_stmt.value = try self.parseExpression(allocator, .Lowest);
+
+        if (self.peekTokenIs(.Semicolon)) {
             self.nextToken();
         }
 
@@ -160,7 +164,9 @@ const Parser = struct {
 
         self.nextToken();
 
-        while (!self.curTokenIs(.Semicolon)) {
+        return_stmt.return_value = try self.parseExpression(allocator, .Lowest);
+
+        if (self.peekTokenIs(.Semicolon)) {
             self.nextToken();
         }
 
@@ -462,36 +468,35 @@ const Parser = struct {
 };
 
 test "test let statements" {
-    const input =
-        \\let x = 5;
-        \\let y = 10;
-        \\let foobar = 838383;
-    ;
-
-    const allocator = std.testing.allocator;
-
-    const l = try lexer.Lexer.init(allocator, input);
-    defer allocator.destroy(l);
-
-    const p = try Parser.init(allocator, l);
-    defer p.deinit(allocator);
-
-    const program = try p.parseProgram(allocator);
-    checkParserErrors(p);
-    defer program.deinit(allocator);
-
-    try testing.expect(program.statements.items.len == 3);
-
-    const expected = [_]struct {
-        identifier: []const u8,
+    const let_tests = [_]struct {
+        input: []const u8,
+        expected_identifier: []const u8,
+        expected_value: TestLiteralValue,
     }{
-        .{ .identifier = "x" },
-        .{ .identifier = "y" },
-        .{ .identifier = "foobar" },
+        .{ .input = "let x = 5;", .expected_identifier = "x", .expected_value = .{ .integer = 5 } },
+        .{ .input = "let y = true;", .expected_identifier = "y", .expected_value = .{ .boolean = true } },
+        .{ .input = "let foobar = y;", .expected_identifier = "foobar", .expected_value = .{ .string = "y" } },
     };
 
-    for (program.statements.items, expected) |stmt, exp| {
-        try testing.expect(testLetStatement(stmt, exp.identifier));
+    for (let_tests) |let_test| {
+        const allocator = std.testing.allocator;
+
+        const l = try lexer.Lexer.init(allocator, let_test.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit(allocator);
+
+        const program = try p.parseProgram(allocator);
+        checkParserErrors(p);
+        defer program.deinit(allocator);
+
+        try testing.expect(program.statements.items.len == 1);
+
+        const let_stmt: *ast.LetStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+        try testing.expect(testLetStatement(let_stmt.statement(), let_test.expected_identifier));
+        try testing.expect(try testLiteralExpression(allocator, let_stmt.value.?, let_test.expected_value));
     }
 }
 
@@ -530,29 +535,35 @@ fn testLetStatement(s: ast.Statement, name: []const u8) bool {
 }
 
 test "test return statement" {
-    const input =
-        \\return 5;
-        \\return 10;
-        \\return 993322;
-    ;
+    const return_tests = [_]struct {
+        input: []const u8,
+        expected_value: TestLiteralValue,
+    }{
+        .{ .input = "return 5;", .expected_value = .{ .integer = 5 } },
+        .{ .input = "return 10;", .expected_value = .{ .integer = 10 } },
+        .{ .input = "return 993322;", .expected_value = .{ .integer = 993322 } },
+    };
 
-    const allocator = std.testing.allocator;
+    for (return_tests) |return_test| {
+        const allocator = std.testing.allocator;
 
-    const l = try lexer.Lexer.init(allocator, input);
-    defer allocator.destroy(l);
+        const l = try lexer.Lexer.init(allocator, return_test.input);
+        defer allocator.destroy(l);
 
-    const p = try Parser.init(allocator, l);
-    defer p.deinit(allocator);
+        const p = try Parser.init(allocator, l);
+        defer p.deinit(allocator);
 
-    const program = try p.parseProgram(allocator);
-    checkParserErrors(p);
-    defer program.deinit(allocator);
+        const program = try p.parseProgram(allocator);
+        checkParserErrors(p);
+        defer program.deinit(allocator);
 
-    try testing.expect(program.statements.items.len == 3);
+        try testing.expect(program.statements.items.len == 1);
 
-    for (program.statements.items) |stmt| {
+        const stmt = program.statements.items[0];
         const ret_stmt: *ast.ReturnStatement = @ptrCast(@alignCast(stmt.ptr));
+
         try testing.expect(std.mem.eql(u8, ret_stmt.tokenLiteral(), "return"));
+        try testing.expect(try testLiteralExpression(allocator, ret_stmt.return_value.?, return_test.expected_value));
     }
 }
 

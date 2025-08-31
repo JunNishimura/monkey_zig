@@ -223,6 +223,9 @@ pub const LetStatement = struct {
         if (self.name) |n| {
             allocator.destroy(n);
         }
+        if (self.value) |v| {
+            v.deinit(allocator);
+        }
         self.str_list.deinit();
         allocator.destroy(self);
     }
@@ -268,6 +271,9 @@ pub const ReturnStatement = struct {
 
     pub fn deinit(self: *ReturnStatement, allocator: std.mem.Allocator) void {
         self.str_list.deinit();
+        if (self.return_value) |rv| {
+            rv.deinit(allocator);
+        }
         allocator.destroy(self);
     }
 };
@@ -718,9 +724,9 @@ test "test string" {
 
     const let_stmt = try LetStatement.init(allocator, Token{ .type = .Let, .literal = "let" });
 
-    let_stmt.name = try Identifier.init(allocator, Token{ .type = .Ident, .literal = "myVar" }, "myVar");
+    const name = try Identifier.init(allocator, Token{ .type = .Ident, .literal = "myVar" }, "myVar");
+    let_stmt.name = name;
     const value = try Identifier.init(allocator, Token{ .type = .Ident, .literal = "anotherVar" }, "anotherVar");
-    defer value.deinit(allocator);
     let_stmt.value = value.expression();
     try program.statements.append(let_stmt.statement());
 
