@@ -256,8 +256,9 @@ test "test next token" {
         .{ .expected_type = .Eof, .expected_literal = "" },
     };
 
-    const l = try Lexer.init(std.testing.allocator, input);
-    defer std.testing.allocator.destroy(l);
+    const allocator = testing.allocator;
+    const l = try Lexer.init(allocator, input);
+    defer allocator.destroy(l);
 
     for (expected) |e| {
         const token = l.nextToken();
