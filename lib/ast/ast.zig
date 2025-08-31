@@ -6,7 +6,7 @@ const Node = struct {
     ptr: *anyopaque,
     token_literal_fn: *const fn (ptr: *anyopaque) []const u8,
     string_fn: *const fn (ptr: *anyopaque) anyerror![]const u8,
-    deinit_fn: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void,
+    deinit_fn: *const fn (ptr: *anyopaque) void,
 
     pub fn init(ptr: anytype) Node {
         const T = @TypeOf(ptr);
@@ -23,9 +23,9 @@ const Node = struct {
                 return ptr_info.pointer.child.string(self);
             }
 
-            pub fn deinit(pointer: *anyopaque, allocator: std.mem.Allocator) void {
+            pub fn deinit(pointer: *anyopaque) void {
                 const self: T = @ptrCast(@alignCast(pointer));
-                ptr_info.pointer.child.deinit(self, allocator);
+                ptr_info.pointer.child.deinit(self);
             }
         };
 
@@ -45,8 +45,8 @@ const Node = struct {
         return self.string_fn(self.ptr);
     }
 
-    fn deinit(self: Node, allocator: std.mem.Allocator) void {
-        self.deinit_fn(self.ptr, allocator);
+    fn deinit(self: Node) void {
+        self.deinit_fn(self.ptr);
     }
 };
 
@@ -77,8 +77,8 @@ pub const Statement = struct {
         self.statement_node_fn(self.ptr);
     }
 
-    pub fn deinit(self: Statement, allocator: std.mem.Allocator) void {
-        self.node.deinit(allocator);
+    pub fn deinit(self: Statement) void {
+        self.node.deinit();
     }
 
     pub fn tokenLiteral(self: Statement) []const u8 {
@@ -121,8 +121,8 @@ pub const Expression = struct {
         return self.node.tokenLiteral();
     }
 
-    fn deinit(self: Expression, allocator: std.mem.Allocator) void {
-        self.node.deinit(allocator);
+    fn deinit(self: Expression) void {
+        self.node.deinit();
     }
 
     fn string(self: Expression) ![]const u8 {
@@ -131,6 +131,7 @@ pub const Expression = struct {
 };
 
 pub const Program = struct {
+    allocator: std.mem.Allocator,
     statements: std.ArrayList(Statement),
     str_list: std.ArrayList(u8),
 
@@ -156,23 +157,25 @@ pub const Program = struct {
         const stmts = std.ArrayList(Statement).init(allocator);
         const str_list = std.ArrayList(u8).init(allocator);
         p.* = .{
+            .allocator = allocator,
             .statements = stmts,
             .str_list = str_list,
         };
         return p;
     }
 
-    pub fn deinit(self: *Program, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Program) void {
         for (self.statements.items) |stmt| {
-            stmt.deinit(allocator);
+            stmt.deinit();
         }
         self.statements.deinit();
         self.str_list.deinit();
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 };
 
 pub const LetStatement = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     name: ?*Identifier,
     value: ?Expression,
@@ -211,6 +214,7 @@ pub const LetStatement = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token) !*LetStatement {
         const stmt = try allocator.create(LetStatement);
         stmt.* = .{
+            .allocator = allocator,
             .token = token,
             .name = null,
             .value = null,
@@ -219,19 +223,20 @@ pub const LetStatement = struct {
         return stmt;
     }
 
-    pub fn deinit(self: *LetStatement, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *LetStatement) void {
         if (self.name) |n| {
-            allocator.destroy(n);
+            self.allocator.destroy(n);
         }
         if (self.value) |v| {
-            v.deinit(allocator);
+            v.deinit();
         }
         self.str_list.deinit();
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 };
 
 pub const ReturnStatement = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     return_value: ?Expression,
     str_list: std.ArrayList(u8),
@@ -262,6 +267,7 @@ pub const ReturnStatement = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token) !*ReturnStatement {
         const stmt = try allocator.create(ReturnStatement);
         stmt.* = .{
+            .allocator = allocator,
             .token = token,
             .return_value = null,
             .str_list = std.ArrayList(u8).init(allocator),
@@ -269,16 +275,17 @@ pub const ReturnStatement = struct {
         return stmt;
     }
 
-    pub fn deinit(self: *ReturnStatement, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *ReturnStatement) void {
         self.str_list.deinit();
         if (self.return_value) |rv| {
-            rv.deinit(allocator);
+            rv.deinit();
         }
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 };
 
 pub const ExpressionStatement = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     expression: ?Expression,
 
@@ -286,12 +293,12 @@ pub const ExpressionStatement = struct {
     fn tokenLiteral(self: *ExpressionStatement) []const u8 {
         return self.token.literal;
     }
-    fn deinit(self: *ExpressionStatement, allocator: std.mem.Allocator) void {
+    fn deinit(self: *ExpressionStatement) void {
         if (self.expression) |e| {
-            e.deinit(allocator);
+            e.deinit();
         }
 
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
     fn string(self: *ExpressionStatement) ![]const u8 {
         if (self.expression) |e| {
@@ -307,6 +314,7 @@ pub const ExpressionStatement = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token) !*ExpressionStatement {
         const stmt = try allocator.create(ExpressionStatement);
         stmt.* = .{
+            .allocator = allocator,
             .token = token,
             .expression = null,
         };
@@ -315,6 +323,7 @@ pub const ExpressionStatement = struct {
 };
 
 pub const BlockStatement = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     statements: std.ArrayList(Statement),
     str_list: std.ArrayList(u8),
@@ -336,6 +345,7 @@ pub const BlockStatement = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token) !*BlockStatement {
         const block = try allocator.create(BlockStatement);
         block.* = .{
+            .allocator = allocator,
             .token = token,
             .statements = std.ArrayList(Statement).init(allocator),
             .str_list = std.ArrayList(u8).init(allocator),
@@ -343,13 +353,13 @@ pub const BlockStatement = struct {
         return block;
     }
 
-    pub fn deinit(self: *BlockStatement, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *BlockStatement) void {
         for (self.statements.items) |stmt| {
-            stmt.deinit(allocator);
+            stmt.deinit();
         }
         self.statements.deinit();
         self.str_list.deinit();
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 
     pub fn statement(self: *BlockStatement) Statement {
@@ -358,6 +368,7 @@ pub const BlockStatement = struct {
 };
 
 pub const PrefixExpression = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     operator: []const u8,
     right: ?Expression,
@@ -385,6 +396,7 @@ pub const PrefixExpression = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token, operator: []const u8) !*PrefixExpression {
         const prefix_exp = try allocator.create(PrefixExpression);
         prefix_exp.* = .{
+            .allocator = allocator,
             .token = token,
             .operator = operator,
             .right = null,
@@ -393,12 +405,12 @@ pub const PrefixExpression = struct {
         return prefix_exp;
     }
 
-    pub fn deinit(self: *PrefixExpression, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *PrefixExpression) void {
         self.str_list.deinit();
         if (self.right) |r| {
-            r.deinit(allocator);
+            r.deinit();
         }
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 
     pub fn expression(self: *PrefixExpression) Expression {
@@ -407,6 +419,7 @@ pub const PrefixExpression = struct {
 };
 
 pub const InfixExpression = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     left: Expression,
     operator: []const u8,
@@ -440,6 +453,7 @@ pub const InfixExpression = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token, operator: []const u8, left: Expression) !*InfixExpression {
         const infix_exp = try allocator.create(InfixExpression);
         infix_exp.* = .{
+            .allocator = allocator,
             .token = token,
             .left = left,
             .operator = operator,
@@ -449,17 +463,18 @@ pub const InfixExpression = struct {
         return infix_exp;
     }
 
-    pub fn deinit(self: *InfixExpression, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *InfixExpression) void {
         self.str_list.deinit();
-        self.left.deinit(allocator);
+        self.left.deinit();
         if (self.right) |r| {
-            r.deinit(allocator);
+            r.deinit();
         }
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 };
 
 pub const IfExpression = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     condition: ?Expression,
     consequence: ?*BlockStatement,
@@ -489,6 +504,7 @@ pub const IfExpression = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token) !*IfExpression {
         const if_exp = try allocator.create(IfExpression);
         if_exp.* = .{
+            .allocator = allocator,
             .token = token,
             .condition = null,
             .consequence = null,
@@ -498,18 +514,18 @@ pub const IfExpression = struct {
         return if_exp;
     }
 
-    pub fn deinit(self: *IfExpression, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *IfExpression) void {
         self.str_list.deinit();
         if (self.condition) |cond| {
-            cond.deinit(allocator);
+            cond.deinit();
         }
         if (self.consequence) |cons| {
-            cons.deinit(allocator);
+            cons.deinit();
         }
         if (self.alternative) |alt| {
-            alt.deinit(allocator);
+            alt.deinit();
         }
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 
     pub fn expression(self: *IfExpression) Expression {
@@ -518,16 +534,20 @@ pub const IfExpression = struct {
 };
 
 pub const Identifier = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     value: []const u8,
 
     pub fn tokenLiteral(self: *Identifier) []const u8 {
         return self.token.literal;
     }
+
     fn expressionNode(_: *Identifier) void {}
-    pub fn deinit(self: *Identifier, allocator: std.mem.Allocator) void {
-        allocator.destroy(self);
+
+    pub fn deinit(self: *Identifier) void {
+        self.allocator.destroy(self);
     }
+
     fn string(self: *Identifier) ![]const u8 {
         return self.value;
     }
@@ -535,6 +555,7 @@ pub const Identifier = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token, value: []const u8) !*Identifier {
         const ident = try allocator.create(Identifier);
         ident.* = .{
+            .allocator = allocator,
             .token = token,
             .value = value,
         };
@@ -547,6 +568,7 @@ pub const Identifier = struct {
 };
 
 pub const IntegerLiteral = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     value: ?i64,
 
@@ -556,8 +578,8 @@ pub const IntegerLiteral = struct {
 
     fn expressionNode(_: *IntegerLiteral) void {}
 
-    pub fn deinit(self: *IntegerLiteral, allocator: std.mem.Allocator) void {
-        allocator.destroy(self);
+    pub fn deinit(self: *IntegerLiteral) void {
+        self.allocator.destroy(self);
     }
 
     pub fn string(self: *IntegerLiteral) ![]const u8 {
@@ -567,6 +589,7 @@ pub const IntegerLiteral = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token) !*IntegerLiteral {
         const lit = try allocator.create(IntegerLiteral);
         lit.* = .{
+            .allocator = allocator,
             .token = token,
             .value = null,
         };
@@ -579,6 +602,7 @@ pub const IntegerLiteral = struct {
 };
 
 pub const Boolean = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     value: bool,
 
@@ -595,14 +619,15 @@ pub const Boolean = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token, value: bool) !*Boolean {
         const b = try allocator.create(Boolean);
         b.* = .{
+            .allocator = allocator,
             .token = token,
             .value = value,
         };
         return b;
     }
 
-    pub fn deinit(self: *Boolean, allocator: std.mem.Allocator) void {
-        allocator.destroy(self);
+    pub fn deinit(self: *Boolean) void {
+        self.allocator.destroy(self);
     }
 
     pub fn expression(self: *Boolean) Expression {
@@ -611,6 +636,7 @@ pub const Boolean = struct {
 };
 
 pub const FunctionLiteral = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     parameters: std.ArrayList(*Identifier),
     body: ?*BlockStatement,
@@ -639,6 +665,7 @@ pub const FunctionLiteral = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token) !*FunctionLiteral {
         const lit = try allocator.create(FunctionLiteral);
         lit.* = .{
+            .allocator = allocator,
             .token = token,
             .parameters = std.ArrayList(*Identifier).init(allocator),
             .body = null,
@@ -647,16 +674,16 @@ pub const FunctionLiteral = struct {
         return lit;
     }
 
-    pub fn deinit(self: *FunctionLiteral, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *FunctionLiteral) void {
         self.str_list.deinit();
         for (self.parameters.items) |param| {
-            param.deinit(allocator);
+            param.deinit();
         }
         self.parameters.deinit();
         if (self.body) |body| {
-            body.deinit(allocator);
+            body.deinit();
         }
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 
     pub fn expression(self: *FunctionLiteral) Expression {
@@ -665,6 +692,7 @@ pub const FunctionLiteral = struct {
 };
 
 pub const CallExpression = struct {
+    allocator: std.mem.Allocator,
     token: Token,
     function: Expression,
     arguments: std.ArrayList(Expression),
@@ -693,6 +721,7 @@ pub const CallExpression = struct {
     pub fn init(allocator: std.mem.Allocator, token: Token, function: Expression) !*CallExpression {
         const call_exp = try allocator.create(CallExpression);
         call_exp.* = .{
+            .allocator = allocator,
             .token = token,
             .function = function,
             .arguments = std.ArrayList(Expression).init(allocator),
@@ -701,14 +730,14 @@ pub const CallExpression = struct {
         return call_exp;
     }
 
-    fn deinit(self: *CallExpression, allocator: std.mem.Allocator) void {
+    fn deinit(self: *CallExpression) void {
         self.str_list.deinit();
-        self.function.deinit(allocator);
+        self.function.deinit();
         for (self.arguments.items) |arg| {
-            arg.deinit(allocator);
+            arg.deinit();
         }
         self.arguments.deinit();
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 
     pub fn expression(self: *CallExpression) Expression {
@@ -720,7 +749,7 @@ test "test string" {
     const allocator = testing.allocator;
 
     const program = try Program.init(allocator);
-    defer program.deinit(allocator);
+    defer program.deinit();
 
     const let_stmt = try LetStatement.init(allocator, Token{ .type = .Let, .literal = "let" });
 

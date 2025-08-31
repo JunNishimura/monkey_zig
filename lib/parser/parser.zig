@@ -489,7 +489,7 @@ test "test let statements" {
 
         const program = try p.parseProgram(allocator);
         checkParserErrors(p);
-        defer program.deinit(allocator);
+        defer program.deinit();
 
         try testing.expect(program.statements.items.len == 1);
 
@@ -555,7 +555,7 @@ test "test return statement" {
 
         const program = try p.parseProgram(allocator);
         checkParserErrors(p);
-        defer program.deinit(allocator);
+        defer program.deinit();
 
         try testing.expect(program.statements.items.len == 1);
 
@@ -582,7 +582,7 @@ test "test identifier expression" {
 
     const program = try p.parseProgram(allocator);
     checkParserErrors(p);
-    defer program.deinit(allocator);
+    defer program.deinit();
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -609,7 +609,7 @@ test "test integer literal expression" {
 
     const program = try p.parseProgram(allocator);
     checkParserErrors(p);
-    defer program.deinit(allocator);
+    defer program.deinit();
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -667,7 +667,7 @@ test "test parsing prefix expressions" {
 
         const program = try p.parseProgram(allocator);
         checkParserErrors(p);
-        defer program.deinit(allocator);
+        defer program.deinit();
 
         try testing.expect(program.statements.items.len == 1);
 
@@ -711,7 +711,7 @@ test "test parsing infix expressions" {
 
         const program = try p.parseProgram(allocator);
         checkParserErrors(p);
-        defer program.deinit(allocator);
+        defer program.deinit();
 
         try testing.expect(program.statements.items.len == 1);
 
@@ -765,7 +765,7 @@ test "test operator precedence parsing" {
 
         const program = try p.parseProgram(allocator);
         checkParserErrors(p);
-        defer program.deinit(allocator);
+        defer program.deinit();
 
         const program_str = try program.string();
         try testing.expect(std.mem.eql(u8, program_str, precedence_test.expected));
@@ -853,7 +853,7 @@ test "test boolean expression" {
 
         const program = try p.parseProgram(allocator);
         checkParserErrors(p);
-        defer program.deinit(allocator);
+        defer program.deinit();
 
         const stmt = program.statements.items[0];
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
@@ -876,7 +876,7 @@ test "test if expression" {
 
     const program = try p.parseProgram(allocator);
     checkParserErrors(p);
-    defer program.deinit(allocator);
+    defer program.deinit();
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -906,7 +906,7 @@ test "test if else expression" {
 
     const program = try p.parseProgram(allocator);
     checkParserErrors(p);
-    defer program.deinit(allocator);
+    defer program.deinit();
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -939,7 +939,7 @@ test "test function literal parsing" {
 
     const program = try p.parseProgram(allocator);
     checkParserErrors(p);
-    defer program.deinit(allocator);
+    defer program.deinit();
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -978,7 +978,7 @@ test "test function parameter parsing" {
 
         const program = try p.parseProgram(allocator);
         checkParserErrors(p);
-        defer program.deinit(allocator);
+        defer program.deinit();
 
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
         const func_literal: *ast.FunctionLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
@@ -1004,7 +1004,7 @@ test "test call expression parsing" {
 
     const program = try p.parseProgram(allocator);
     checkParserErrors(p);
-    defer program.deinit(allocator);
+    defer program.deinit();
 
     try testing.expect(program.statements.items.len == 1);
 
