@@ -45,7 +45,7 @@ const Precedences = std.StaticStringMap(Precedence).initComptime(.{
     .{ tok.TokenType.LParen.string(), Precedence.Call },
 });
 
-const Parser = struct {
+pub const Parser = struct {
     l: *lexer.Lexer,
     cur_token: tok.Token,
     peek_token: tok.Token,
@@ -53,7 +53,7 @@ const Parser = struct {
     prefix_parse_fns: std.AutoHashMap(tok.TokenType, PrefixParseFn),
     infix_parse_fns: std.AutoHashMap(tok.TokenType, InfixParseFn),
 
-    fn init(allocator: std.mem.Allocator, l: *lexer.Lexer) !*Parser {
+    pub fn init(allocator: std.mem.Allocator, l: *lexer.Lexer) !*Parser {
         var p = try allocator.create(Parser);
         p.* = .{
             .l = l,
@@ -423,7 +423,7 @@ const Parser = struct {
         }
     }
 
-    fn parseProgram(self: *Parser, allocator: std.mem.Allocator) !*ast.Program {
+    pub fn parseProgram(self: *Parser, allocator: std.mem.Allocator) !*ast.Program {
         const program = try ast.Program.init(allocator);
 
         while (self.cur_token.type != .Eof) {

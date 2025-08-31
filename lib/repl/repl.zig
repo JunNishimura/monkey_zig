@@ -1,5 +1,6 @@
 const std = @import("std");
 const lexer = @import("lexer");
+const parser = @import("parser");
 
 const prompt = ">> ";
 
@@ -18,12 +19,21 @@ pub fn start(
             const l = try lexer.Lexer.init(allocator, line);
             defer allocator.destroy(l);
 
-            while (true) {
-                const token = l.NextToken();
-                if (token.type == .Eof) break;
+            const p = try parser.Parser.init(allocator, l);
+            defer allocator.destroy(p);
 
-                try stdout.print("{any}\n", .{token});
+            const program = try p.parseProgram(allocator);
+            defer program.deinit(allocator);
+
+            if (p.errors.items.len > 0) {
+                try stdout.print("Woops! We ran into some errors here!\n", .{});
+                try stdout.print("Parser errors:\n", .{});
+                for (p.errors.items) |err| {
+                    try stdout.print("\t{s}\n", .{err});
+                }
             }
+
+            try stdout.print("\t{s}\n", .{try program.string()});
         }
     }
 }

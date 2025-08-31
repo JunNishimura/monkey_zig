@@ -43,10 +43,22 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .imports = &.{.{ .name = "token", .module = token_mod }},
     });
+    const parser_mod = b.addModule("parser", .{
+        .root_source_file = b.path("lib/parser/parser.zig"),
+        .target = target,
+        .imports = &.{
+            .{ .name = "token", .module = token_mod },
+            .{ .name = "lexer", .module = lexer_mod },
+            .{ .name = "ast", .module = ast_mod },
+        },
+    });
     const repl_mod = b.createModule(.{
         .root_source_file = b.path("lib/repl/repl.zig"),
         .target = target,
-        .imports = &.{.{ .name = "lexer", .module = lexer_mod }},
+        .imports = &.{
+            .{ .name = "lexer", .module = lexer_mod },
+            .{ .name = "parser", .module = parser_mod },
+        },
     });
 
     // Here we define an executable. An executable needs to have a root module
@@ -90,6 +102,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "lexer", .module = lexer_mod },
                 .{ .name = "repl", .module = repl_mod },
                 .{ .name = "ast", .module = ast_mod },
+                .{ .name = "parser", .module = parser_mod },
             },
         }),
     });
