@@ -20,10 +20,10 @@ pub fn start(
             defer allocator.destroy(l);
 
             const p = try parser.Parser.init(allocator, l);
-            defer allocator.destroy(p);
+            defer p.deinit();
 
-            const program = try p.parseProgram(allocator);
-            defer program.deinit(allocator);
+            try p.parseProgram();
+            const program = p.program;
 
             if (p.errors.items.len > 0) {
                 try stdout.print("Woops! We ran into some errors here!\n", .{});

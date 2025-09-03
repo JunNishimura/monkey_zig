@@ -46,22 +46,26 @@ const Precedences = std.StaticStringMap(Precedence).initComptime(.{
 });
 
 pub const Parser = struct {
+    allocator: std.mem.Allocator,
     l: *lexer.Lexer,
     cur_token: tok.Token,
     peek_token: tok.Token,
     errors: std.ArrayList([]u8),
     prefix_parse_fns: std.AutoHashMap(tok.TokenType, PrefixParseFn),
     infix_parse_fns: std.AutoHashMap(tok.TokenType, InfixParseFn),
+    program: *ast.Program,
 
     pub fn init(allocator: std.mem.Allocator, l: *lexer.Lexer) !*Parser {
         var p = try allocator.create(Parser);
         p.* = .{
+            .allocator = allocator,
             .l = l,
             .cur_token = .{ .type = .Illegal, .literal = "" },
             .peek_token = .{ .type = .Illegal, .literal = "" },
             .errors = std.ArrayList([]u8).init(allocator),
             .prefix_parse_fns = std.AutoHashMap(tok.TokenType, PrefixParseFn).init(allocator),
             .infix_parse_fns = std.AutoHashMap(tok.TokenType, InfixParseFn).init(allocator),
+            .program = try ast.Program.init(allocator),
         };
         try p.registerPrefix(.Ident, parseIdentifier);
         try p.registerPrefix(.Int, parseIntegerLiteral);
@@ -87,14 +91,15 @@ pub const Parser = struct {
         return p;
     }
 
-    fn deinit(self: *Parser, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Parser) void {
         for (self.errors.items) |err| {
-            allocator.free(err);
+            self.allocator.free(err);
         }
         self.errors.deinit();
         self.prefix_parse_fns.deinit();
         self.infix_parse_fns.deinit();
-        allocator.destroy(self);
+        self.program.deinit();
+        self.allocator.destroy(self);
     }
 
     fn nextToken(self: *Parser) void {
@@ -423,18 +428,14 @@ pub const Parser = struct {
         }
     }
 
-    pub fn parseProgram(self: *Parser, allocator: std.mem.Allocator) !*ast.Program {
-        const program = try ast.Program.init(allocator);
-
+    pub fn parseProgram(self: *Parser) !void {
         while (self.cur_token.type != .Eof) {
-            const stmt = try self.parseStatement(allocator);
+            const stmt = try self.parseStatement(self.allocator);
             if (stmt) |s| {
-                try program.statements.append(s);
+                try self.program.statements.append(s);
             }
             self.nextToken();
         }
-
-        return program;
     }
 
     fn peekError(self: *Parser, allocator: std.mem.Allocator, token_type: tok.TokenType) !void {
@@ -485,11 +486,11 @@ test "test let statements" {
         defer allocator.destroy(l);
 
         const p = try Parser.init(allocator, l);
-        defer p.deinit(allocator);
+        defer p.deinit();
 
-        const program = try p.parseProgram(allocator);
+        try p.parseProgram();
         checkParserErrors(p);
-        defer program.deinit();
+        const program = p.program;
 
         try testing.expect(program.statements.items.len == 1);
 
@@ -551,11 +552,11 @@ test "test return statement" {
         defer allocator.destroy(l);
 
         const p = try Parser.init(allocator, l);
-        defer p.deinit(allocator);
+        defer p.deinit();
 
-        const program = try p.parseProgram(allocator);
+        try p.parseProgram();
         checkParserErrors(p);
-        defer program.deinit();
+        const program = p.program;
 
         try testing.expect(program.statements.items.len == 1);
 
@@ -578,11 +579,11 @@ test "test identifier expression" {
     defer allocator.destroy(l);
 
     const p = try Parser.init(allocator, l);
-    defer p.deinit(allocator);
+    defer p.deinit();
 
-    const program = try p.parseProgram(allocator);
+    try p.parseProgram();
     checkParserErrors(p);
-    defer program.deinit();
+    const program = p.program;
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -605,11 +606,11 @@ test "test integer literal expression" {
     defer allocator.destroy(l);
 
     const p = try Parser.init(allocator, l);
-    defer p.deinit(allocator);
+    defer p.deinit();
 
-    const program = try p.parseProgram(allocator);
+    try p.parseProgram();
     checkParserErrors(p);
-    defer program.deinit();
+    const program = p.program;
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -663,11 +664,11 @@ test "test parsing prefix expressions" {
         defer allocator.destroy(l);
 
         const p = try Parser.init(allocator, l);
-        defer p.deinit(allocator);
+        defer p.deinit();
 
-        const program = try p.parseProgram(allocator);
+        try p.parseProgram();
         checkParserErrors(p);
-        defer program.deinit();
+        const program = p.program;
 
         try testing.expect(program.statements.items.len == 1);
 
@@ -707,11 +708,11 @@ test "test parsing infix expressions" {
         defer allocator.destroy(l);
 
         const p = try Parser.init(allocator, l);
-        defer p.deinit(allocator);
+        defer p.deinit();
 
-        const program = try p.parseProgram(allocator);
+        try p.parseProgram();
         checkParserErrors(p);
-        defer program.deinit();
+        const program = p.program;
 
         try testing.expect(program.statements.items.len == 1);
 
@@ -761,11 +762,11 @@ test "test operator precedence parsing" {
         defer allocator.destroy(l);
 
         const p = try Parser.init(allocator, l);
-        defer p.deinit(allocator);
+        defer p.deinit();
 
-        const program = try p.parseProgram(allocator);
+        try p.parseProgram();
         checkParserErrors(p);
-        defer program.deinit();
+        const program = p.program;
 
         const program_str = try program.string();
         try testing.expect(std.mem.eql(u8, program_str, precedence_test.expected));
@@ -849,11 +850,11 @@ test "test boolean expression" {
         defer allocator.destroy(l);
 
         const p = try Parser.init(allocator, l);
-        defer p.deinit(allocator);
+        defer p.deinit();
 
-        const program = try p.parseProgram(allocator);
+        try p.parseProgram();
         checkParserErrors(p);
-        defer program.deinit();
+        const program = p.program;
 
         const stmt = program.statements.items[0];
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
@@ -872,11 +873,11 @@ test "test if expression" {
     defer allocator.destroy(l);
 
     const p = try Parser.init(allocator, l);
-    defer p.deinit(allocator);
+    defer p.deinit();
 
-    const program = try p.parseProgram(allocator);
+    try p.parseProgram();
     checkParserErrors(p);
-    defer program.deinit();
+    const program = p.program;
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -902,11 +903,11 @@ test "test if else expression" {
     defer allocator.destroy(l);
 
     const p = try Parser.init(allocator, l);
-    defer p.deinit(allocator);
+    defer p.deinit();
 
-    const program = try p.parseProgram(allocator);
+    try p.parseProgram();
     checkParserErrors(p);
-    defer program.deinit();
+    const program = p.program;
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -935,11 +936,11 @@ test "test function literal parsing" {
     defer allocator.destroy(l);
 
     const p = try Parser.init(allocator, l);
-    defer p.deinit(allocator);
+    defer p.deinit();
 
-    const program = try p.parseProgram(allocator);
+    try p.parseProgram();
     checkParserErrors(p);
-    defer program.deinit();
+    const program = p.program;
 
     try testing.expect(program.statements.items.len == 1);
 
@@ -974,11 +975,11 @@ test "test function parameter parsing" {
         defer allocator.destroy(l);
 
         const p = try Parser.init(allocator, l);
-        defer p.deinit(allocator);
+        defer p.deinit();
 
-        const program = try p.parseProgram(allocator);
+        try p.parseProgram();
         checkParserErrors(p);
-        defer program.deinit();
+        const program = p.program;
 
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
         const func_literal: *ast.FunctionLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
@@ -1000,11 +1001,11 @@ test "test call expression parsing" {
     defer allocator.destroy(l);
 
     const p = try Parser.init(allocator, l);
-    defer p.deinit(allocator);
+    defer p.deinit();
 
-    const program = try p.parseProgram(allocator);
+    try p.parseProgram();
     checkParserErrors(p);
-    defer program.deinit();
+    const program = p.program;
 
     try testing.expect(program.statements.items.len == 1);
 
