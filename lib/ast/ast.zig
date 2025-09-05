@@ -2,7 +2,7 @@ const std = @import("std");
 const testing = std.testing;
 const Token = @import("token").Token;
 
-const Node = struct {
+pub const Node = struct {
     ptr: *anyopaque,
     token_literal_fn: *const fn (ptr: *anyopaque) []const u8,
     string_fn: *const fn (ptr: *anyopaque) anyerror![]const u8,
