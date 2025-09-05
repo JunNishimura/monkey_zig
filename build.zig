@@ -33,6 +33,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("lib/token/token.zig"),
         .target = target,
     });
+    const obj_mod = b.addModule("object", .{
+        .root_source_file = b.path("lib/object/object.zig"),
+        .target = target,
+    });
     const lexer_mod = b.addModule("lexer", .{
         .root_source_file = b.path("lib/lexer/lexer.zig"),
         .target = target,
@@ -58,6 +62,13 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "lexer", .module = lexer_mod },
             .{ .name = "parser", .module = parser_mod },
+        },
+    });
+    const eval_mod = b.addModule("evaluator", .{
+        .root_source_file = b.path("lib/evaluator/evaluator.zig"),
+        .target = target,
+        .imports = &.{
+            .{ .name = "object", .module = obj_mod },
         },
     });
 
@@ -99,10 +110,12 @@ pub fn build(b: *std.Build) void {
                 // can be extremely useful in case of collisions (which can happen
                 // importing modules from different packages).
                 .{ .name = "token", .module = token_mod },
+                .{ .name = "object", .module = obj_mod },
                 .{ .name = "lexer", .module = lexer_mod },
                 .{ .name = "repl", .module = repl_mod },
                 .{ .name = "ast", .module = ast_mod },
                 .{ .name = "parser", .module = parser_mod },
+                .{ .name = "evaluator", .module = eval_mod },
             },
         }),
     });
