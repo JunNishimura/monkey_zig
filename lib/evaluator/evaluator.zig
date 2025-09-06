@@ -46,6 +46,10 @@ pub fn eval(node: ast.Node) ?Object {
 fn evalInfixExpression(operator: []const u8, left: Object, right: Object) ?Object {
     if (left.getType() == .integer and right.getType() == .integer) {
         return evalIntegerInfixExpression(operator, left, right);
+    } else if (std.mem.eql(u8, operator, "==")) {
+        return Object{ .boolean = left.boolean == right.boolean };
+    } else if (std.mem.eql(u8, operator, "!=")) {
+        return Object{ .boolean = left.boolean != right.boolean };
     }
     return null;
 }
@@ -59,6 +63,14 @@ fn evalIntegerInfixExpression(operator: []const u8, left: Object, right: Object)
         return Object{ .integer = left.integer * right.integer };
     } else if (std.mem.eql(u8, operator, "/")) {
         return Object{ .integer = @divExact(left.integer, right.integer) };
+    } else if (std.mem.eql(u8, operator, "<")) {
+        return Object{ .boolean = left.integer < right.integer };
+    } else if (std.mem.eql(u8, operator, ">")) {
+        return Object{ .boolean = left.integer > right.integer };
+    } else if (std.mem.eql(u8, operator, "==")) {
+        return Object{ .boolean = left.integer == right.integer };
+    } else if (std.mem.eql(u8, operator, "!=")) {
+        return Object{ .boolean = left.integer != right.integer };
     }
     return null;
 }
@@ -158,6 +170,23 @@ test "eval boolean expression" {
     }{
         .{ .input = "true", .expected = true },
         .{ .input = "false", .expected = false },
+        .{ .input = "1 < 2", .expected = true },
+        .{ .input = "1 > 2", .expected = false },
+        .{ .input = "1 < 1", .expected = false },
+        .{ .input = "1 > 1", .expected = false },
+        .{ .input = "1 == 1", .expected = true },
+        .{ .input = "1 != 1", .expected = false },
+        .{ .input = "1 == 2", .expected = false },
+        .{ .input = "1 != 2", .expected = true },
+        .{ .input = "true == true", .expected = true },
+        .{ .input = "false == false", .expected = true },
+        .{ .input = "true == false", .expected = false },
+        .{ .input = "true != false", .expected = true },
+        .{ .input = "false != true", .expected = true },
+        .{ .input = "(1 < 2) == true", .expected = true },
+        .{ .input = "(1 < 2) == false", .expected = false },
+        .{ .input = "(1 > 2) == true", .expected = false },
+        .{ .input = "(1 > 2) == false", .expected = true },
     };
 
     for (tests) |tt| {
