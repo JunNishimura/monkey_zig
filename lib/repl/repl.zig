@@ -37,6 +37,7 @@ pub fn start(
             const eval_result = evaluator.eval(program.node());
             if (eval_result) |obj| {
                 const inspect = try obj.inspect(allocator);
+                defer allocator.free(inspect);
                 try stdout.print("{s}\n", .{inspect});
             } else {
                 try stdout.print("Evaluation returned null.\n", .{});
