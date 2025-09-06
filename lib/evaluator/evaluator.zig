@@ -15,6 +15,10 @@ pub fn eval(node: ast.Node) ?Object {
             const expr_stmt_node: *ast.ExpressionStatement = @ptrCast(@alignCast(node.ptr));
             return eval(expr_stmt_node.expression.?.node);
         },
+        .BlockStatement => {
+            const block_node: *ast.BlockStatement = @ptrCast(@alignCast(node.ptr));
+            return evalStatements(block_node.statements.items);
+        },
         .PrefixExpression => {
             const prefix_node: *ast.PrefixExpression = @ptrCast(@alignCast(node.ptr));
             if (eval(prefix_node.right.?.node)) |right| {
@@ -31,6 +35,9 @@ pub fn eval(node: ast.Node) ?Object {
             }
             return null;
         },
+        .IfExpression => {
+            return evalIfExpression(node);
+        },
         .IntegerLiteral => {
             const int_node: *ast.IntegerLiteral = @ptrCast(@alignCast(node.ptr));
             return Object{ .integer = int_node.value orelse 0 };
@@ -40,6 +47,26 @@ pub fn eval(node: ast.Node) ?Object {
             return Object{ .boolean = bool_node.value };
         },
         else => return null,
+    };
+}
+
+fn evalIfExpression(node: ast.Node) ?Object {
+    const if_node: *ast.IfExpression = @ptrCast(@alignCast(node.ptr));
+    if (eval(if_node.condition.?.node)) |condition| {
+        if (isTruthy(condition)) {
+            return eval(if_node.consequence.?.statement().node);
+        } else if (if_node.alternative) |alt| {
+            return eval(alt.statement().node);
+        }
+    }
+    return Object{ .null = {} };
+}
+
+fn isTruthy(obj: Object) bool {
+    return switch (obj) {
+        .null => false,
+        .boolean => |bool_obj| bool_obj,
+        else => true,
     };
 }
 
@@ -221,4 +248,35 @@ test "test bang operator" {
         const evaluated = try testEval(tt.input);
         try testing.expect(testBooleanObject(evaluated.?, tt.expected));
     }
+}
+
+test "test if-else expressions" {
+    const tests = [_]struct {
+        input: []const u8,
+        expected: ?i64,
+    }{
+        .{ .input = "if (true) { 10 }", .expected = 10 },
+        .{ .input = "if (false) { 10 }", .expected = null },
+        .{ .input = "if (1) { 10 }", .expected = 10 },
+        .{ .input = "if (1 < 2) { 10 }", .expected = 10 },
+        .{ .input = "if (1 > 2) { 10 }", .expected = null },
+        .{ .input = "if (1 > 2) { 10 } else { 20 }", .expected = 20 },
+        .{ .input = "if (1 < 2) { 10 } else { 20 }", .expected = 10 },
+    };
+
+    for (tests) |tt| {
+        const evaluated = try testEval(tt.input);
+        if (tt.expected) |expected| {
+            try testing.expect(testIntegerObject(evaluated.?, expected));
+        } else {
+            try testing.expect(testNullObject(evaluated.?));
+        }
+    }
+}
+
+fn testNullObject(obj: Object) bool {
+    return switch (obj) {
+        .null => true,
+        else => false,
+    };
 }
