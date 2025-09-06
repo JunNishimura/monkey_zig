@@ -17,8 +17,19 @@ pub fn eval(node: ast.Node) ?Object {
         },
         .PrefixExpression => {
             const prefix_node: *ast.PrefixExpression = @ptrCast(@alignCast(node.ptr));
-            const right = eval(prefix_node.right.?.node);
-            return evalPrefixExpression(prefix_node.operator, right);
+            if (eval(prefix_node.right.?.node)) |right| {
+                return evalPrefixExpression(prefix_node.operator, right);
+            }
+            return null;
+        },
+        .InfixExpression => {
+            const infix_node: *ast.InfixExpression = @ptrCast(@alignCast(node.ptr));
+            if (eval(infix_node.left.node)) |left| {
+                if (eval(infix_node.right.?.node)) |right| {
+                    return evalInfixExpression(infix_node.operator, left, right);
+                }
+            }
+            return null;
         },
         .IntegerLiteral => {
             const int_node: *ast.IntegerLiteral = @ptrCast(@alignCast(node.ptr));
@@ -32,16 +43,33 @@ pub fn eval(node: ast.Node) ?Object {
     };
 }
 
-fn evalPrefixExpression(operator: []const u8, right: ?Object) ?Object {
-    if (right == null) return null;
-
-    if (std.mem.eql(u8, operator, "!")) {
-        return evalBangOperatorExpression(right.?);
-    } else if (std.mem.eql(u8, operator, "-")) {
-        return evalMinusPrefixOperatorExpression(right.?);
-    } else {
-        return null;
+fn evalInfixExpression(operator: []const u8, left: Object, right: Object) ?Object {
+    if (left.getType() == .integer and right.getType() == .integer) {
+        return evalIntegerInfixExpression(operator, left, right);
     }
+    return null;
+}
+
+fn evalIntegerInfixExpression(operator: []const u8, left: Object, right: Object) ?Object {
+    if (std.mem.eql(u8, operator, "+")) {
+        return Object{ .integer = left.integer + right.integer };
+    } else if (std.mem.eql(u8, operator, "-")) {
+        return Object{ .integer = left.integer - right.integer };
+    } else if (std.mem.eql(u8, operator, "*")) {
+        return Object{ .integer = left.integer * right.integer };
+    } else if (std.mem.eql(u8, operator, "/")) {
+        return Object{ .integer = @divExact(left.integer, right.integer) };
+    }
+    return null;
+}
+
+fn evalPrefixExpression(operator: []const u8, right: Object) ?Object {
+    if (std.mem.eql(u8, operator, "!")) {
+        return evalBangOperatorExpression(right);
+    } else if (std.mem.eql(u8, operator, "-")) {
+        return evalMinusPrefixOperatorExpression(right);
+    }
+    return null;
 }
 
 fn evalMinusPrefixOperatorExpression(right: Object) ?Object {
@@ -82,6 +110,17 @@ test "eval integer expression" {
         .{ .input = "10", .expected = 10 },
         .{ .input = "-5", .expected = -5 },
         .{ .input = "-10", .expected = -10 },
+        .{ .input = "5 + 5 + 5 + 5 - 10", .expected = 10 },
+        .{ .input = "2 * 2 * 2 * 2 * 2", .expected = 32 },
+        .{ .input = "-50 + 100 + -50", .expected = 0 },
+        .{ .input = "5 * 2 + 10", .expected = 20 },
+        .{ .input = "5 + 2 * 10", .expected = 25 },
+        .{ .input = "20 + 2 * -10", .expected = 0 },
+        .{ .input = "50 / 2 * 2 + 10", .expected = 60 },
+        .{ .input = "2 * (5 + 10)", .expected = 30 },
+        .{ .input = "3 * 3 * 3 + 10", .expected = 37 },
+        .{ .input = "3 * (3 * 3) + 10", .expected = 37 },
+        .{ .input = "(5 + 10 * 2 + 15 / 3) * 2 + -10", .expected = 50 },
     };
 
     for (tests) |tt| {
