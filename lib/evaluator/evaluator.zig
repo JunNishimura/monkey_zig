@@ -19,6 +19,10 @@ pub fn eval(node: ast.Node) ?Object {
             const int_node: *ast.IntegerLiteral = @ptrCast(@alignCast(node.ptr));
             return Object{ .integer = int_node.value orelse 0 };
         },
+        .Boolean => {
+            const bool_node: *ast.Boolean = @ptrCast(@alignCast(node.ptr));
+            return Object{ .boolean = bool_node.value };
+        },
         else => return null,
     };
 }
@@ -65,6 +69,30 @@ fn testIntegerObject(obj: Object, expected: i64) bool {
     switch (obj) {
         .integer => |int_obj| {
             return int_obj == expected;
+        },
+        else => return false,
+    }
+}
+
+test "eval boolean expression" {
+    const tests = [_]struct {
+        input: []const u8,
+        expected: bool,
+    }{
+        .{ .input = "true", .expected = true },
+        .{ .input = "false", .expected = false },
+    };
+
+    for (tests) |tt| {
+        const evaluated = try testEval(tt.input);
+        try testing.expect(testBooleanObject(evaluated.?, tt.expected));
+    }
+}
+
+fn testBooleanObject(obj: Object, expected: bool) bool {
+    switch (obj) {
+        .boolean => |bool_obj| {
+            return bool_obj == expected;
         },
         else => return false,
     }
