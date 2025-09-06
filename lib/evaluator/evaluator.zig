@@ -9,7 +9,7 @@ pub fn eval(node: ast.Node) ?Object {
     return switch (node.nodeType()) {
         .Program => {
             const program_node: *ast.Program = @ptrCast(@alignCast(node.ptr));
-            return evalStatements(program_node.statements.items);
+            return evalProgram(program_node.statements.items);
         },
         .ExpressionStatement => {
             const expr_stmt_node: *ast.ExpressionStatement = @ptrCast(@alignCast(node.ptr));
@@ -18,6 +18,11 @@ pub fn eval(node: ast.Node) ?Object {
         .BlockStatement => {
             const block_node: *ast.BlockStatement = @ptrCast(@alignCast(node.ptr));
             return evalStatements(block_node.statements.items);
+        },
+        .ReturnStatement => {
+            const return_node: *ast.ReturnStatement = @ptrCast(@alignCast(node.ptr));
+            var return_value = eval(return_node.return_value.?.node);
+            return Object{ .return_obj = &(return_value.?) };
         },
         .PrefixExpression => {
             const prefix_node: *ast.PrefixExpression = @ptrCast(@alignCast(node.ptr));
@@ -48,6 +53,23 @@ pub fn eval(node: ast.Node) ?Object {
         },
         else => return null,
     };
+}
+
+fn evalProgram(statements: []ast.Statement) ?Object {
+    var result: ?Object = null;
+
+    for (statements) |stmt| {
+        result = eval(stmt.node);
+
+        switch (result.?) {
+            .return_obj => |val| {
+                return val.*;
+            },
+            else => {},
+        }
+    }
+
+    return result;
 }
 
 fn evalIfExpression(node: ast.Node) ?Object {
@@ -135,6 +157,12 @@ fn evalStatements(statements: []ast.Statement) ?Object {
 
     for (statements) |stmt| {
         result = eval(stmt.node);
+
+        if (result) |r| {
+            if (r.getType() == .return_obj) {
+                return r;
+            }
+        }
     }
 
     return result;
@@ -279,4 +307,22 @@ fn testNullObject(obj: Object) bool {
         .null => true,
         else => false,
     };
+}
+
+test "test return statements" {
+    const tests = [_]struct {
+        input: []const u8,
+        expected: i64,
+    }{
+        .{ .input = "return 10;", .expected = 10 },
+        .{ .input = "return 10; 9;", .expected = 10 },
+        .{ .input = "return 2 * 5; 9;", .expected = 10 },
+        .{ .input = "9; return 2 * 5; 9;", .expected = 10 },
+        .{ .input = "if (10 > 1) { if (10 > 1) { return 10; } return 1; }", .expected = 10 },
+    };
+
+    for (tests) |tt| {
+        const evaluated = try testEval(tt.input);
+        try testing.expect(testIntegerObject(evaluated.?, tt.expected));
+    }
 }

@@ -11,7 +11,7 @@ pub const Object = union(ObjectType) {
     integer: i64,
     boolean: bool,
     null: void,
-    return_obj: Object,
+    return_obj: *Object,
 
     pub fn getType(self: Object) ObjectType {
         return switch (self) {
