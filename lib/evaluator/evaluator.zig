@@ -37,9 +37,20 @@ fn evalPrefixExpression(operator: []const u8, right: ?Object) ?Object {
 
     if (std.mem.eql(u8, operator, "!")) {
         return evalBangOperatorExpression(right.?);
+    } else if (std.mem.eql(u8, operator, "-")) {
+        return evalMinusPrefixOperatorExpression(right.?);
     } else {
         return null;
     }
+}
+
+fn evalMinusPrefixOperatorExpression(right: Object) ?Object {
+    return switch (right) {
+        .integer => |int_obj| {
+            return Object{ .integer = -int_obj };
+        },
+        else => return null,
+    };
 }
 
 fn evalBangOperatorExpression(right: Object) Object {
@@ -69,6 +80,8 @@ test "eval integer expression" {
     }{
         .{ .input = "5", .expected = 5 },
         .{ .input = "10", .expected = 10 },
+        .{ .input = "-5", .expected = -5 },
+        .{ .input = "-10", .expected = -10 },
     };
 
     for (tests) |tt| {
