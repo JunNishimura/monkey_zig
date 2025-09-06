@@ -15,6 +15,11 @@ pub fn eval(node: ast.Node) ?Object {
             const expr_stmt_node: *ast.ExpressionStatement = @ptrCast(@alignCast(node.ptr));
             return eval(expr_stmt_node.expression.?.node);
         },
+        .PrefixExpression => {
+            const prefix_node: *ast.PrefixExpression = @ptrCast(@alignCast(node.ptr));
+            const right = eval(prefix_node.right.?.node);
+            return evalPrefixExpression(prefix_node.operator, right);
+        },
         .IntegerLiteral => {
             const int_node: *ast.IntegerLiteral = @ptrCast(@alignCast(node.ptr));
             return Object{ .integer = int_node.value orelse 0 };
@@ -24,6 +29,26 @@ pub fn eval(node: ast.Node) ?Object {
             return Object{ .boolean = bool_node.value };
         },
         else => return null,
+    };
+}
+
+fn evalPrefixExpression(operator: []const u8, right: ?Object) ?Object {
+    if (right == null) return null;
+
+    if (std.mem.eql(u8, operator, "!")) {
+        return evalBangOperatorExpression(right.?);
+    } else {
+        return null;
+    }
+}
+
+fn evalBangOperatorExpression(right: Object) Object {
+    return switch (right) {
+        .boolean => |bool_obj| {
+            return Object{ .boolean = !bool_obj };
+        },
+        .null => Object{ .boolean = true },
+        else => Object{ .boolean = false },
     };
 }
 
@@ -95,5 +120,24 @@ fn testBooleanObject(obj: Object, expected: bool) bool {
             return bool_obj == expected;
         },
         else => return false,
+    }
+}
+
+test "test bang operator" {
+    const tests = [_]struct {
+        input: []const u8,
+        expected: bool,
+    }{
+        .{ .input = "!true", .expected = false },
+        .{ .input = "!false", .expected = true },
+        .{ .input = "!5", .expected = false },
+        .{ .input = "!!true", .expected = true },
+        .{ .input = "!!false", .expected = false },
+        .{ .input = "!!5", .expected = true },
+    };
+
+    for (tests) |tt| {
+        const evaluated = try testEval(tt.input);
+        try testing.expect(testBooleanObject(evaluated.?, tt.expected));
     }
 }
