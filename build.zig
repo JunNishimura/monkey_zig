@@ -56,19 +56,23 @@ pub fn build(b: *std.Build) void {
             .{ .name = "ast", .module = ast_mod },
         },
     });
+    const eval_mod = b.addModule("evaluator", .{
+        .root_source_file = b.path("lib/evaluator/evaluator.zig"),
+        .target = target,
+        .imports = &.{
+            .{ .name = "ast", .module = ast_mod },
+            .{ .name = "lexer", .module = lexer_mod },
+            .{ .name = "parser", .module = parser_mod },
+            .{ .name = "object", .module = obj_mod },
+        },
+    });
     const repl_mod = b.createModule(.{
         .root_source_file = b.path("lib/repl/repl.zig"),
         .target = target,
         .imports = &.{
             .{ .name = "lexer", .module = lexer_mod },
             .{ .name = "parser", .module = parser_mod },
-        },
-    });
-    const eval_mod = b.addModule("evaluator", .{
-        .root_source_file = b.path("lib/evaluator/evaluator.zig"),
-        .target = target,
-        .imports = &.{
-            .{ .name = "object", .module = obj_mod },
+            .{ .name = "evaluator", .module = eval_mod },
         },
     });
 

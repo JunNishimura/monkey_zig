@@ -1,6 +1,7 @@
 const std = @import("std");
 const lexer = @import("lexer");
 const parser = @import("parser");
+const evaluator = @import("evaluator");
 
 const prompt = ">> ";
 
@@ -33,7 +34,13 @@ pub fn start(
                 }
             }
 
-            try stdout.print("\t{s}\n", .{try program.string()});
+            const eval_result = evaluator.eval(program.node());
+            if (eval_result) |obj| {
+                const inspect = try obj.inspect(allocator);
+                try stdout.print("{s}\n", .{inspect});
+            } else {
+                try stdout.print("Evaluation returned null.\n", .{});
+            }
         }
     }
 }

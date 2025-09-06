@@ -21,8 +21,8 @@ pub const Object = union(ObjectType) {
 
     pub fn inspect(self: Object, allocator: std.mem.Allocator) ![]const u8 {
         return switch (self) {
-            .integer => try std.fmt.allocPrint(allocator, "{d}", self.integer),
-            .boolean => try std.fmt.allocPrint(allocator, "{b}", self.boolean),
+            .integer => try std.fmt.allocPrint(allocator, "{d}", .{self.integer}),
+            .boolean => try std.fmt.allocPrint(allocator, "{any}", .{self.boolean}),
             .null => "null",
         };
     }
