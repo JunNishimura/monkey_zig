@@ -186,11 +186,26 @@ pub fn build(b: *std.Build) void {
             }),
         },
     );
+    const eval_tests = b.addTest(
+        .{
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("lib/evaluator/evaluator.zig"),
+                .target = target,
+                .imports = &.{
+                    .{ .name = "object", .module = obj_mod },
+                    .{ .name = "lexer", .module = lexer_mod },
+                    .{ .name = "parser", .module = parser_mod },
+                    .{ .name = "ast", .module = ast_mod },
+                },
+            }),
+        },
+    );
 
     // A run step that will run the test executable.
     const run_lexer_tests = b.addRunArtifact(lexer_tests);
     const run_parser_tests = b.addRunArtifact(parser_tests);
     const run_ast_tests = b.addRunArtifact(ast_tests);
+    const run_eval_tests = b.addRunArtifact(eval_tests);
 
     // Creates an executable that will run `test` blocks from the executable's
     // root module. Note that test executables only test one module at a time,
@@ -209,6 +224,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_lexer_tests.step);
     test_step.dependOn(&run_parser_tests.step);
     test_step.dependOn(&run_ast_tests.step);
+    test_step.dependOn(&run_eval_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
     // Just like flags, top level steps are also listed in the `--help` menu.
