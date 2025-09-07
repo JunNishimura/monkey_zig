@@ -5,6 +5,7 @@ const ObjectType = enum {
     boolean,
     null,
     return_obj,
+    error_obj,
 };
 
 pub const Object = union(ObjectType) {
@@ -12,6 +13,7 @@ pub const Object = union(ObjectType) {
     boolean: bool,
     null: void,
     return_obj: *Object,
+    error_obj: []const u8,
 
     pub fn getType(self: Object) ObjectType {
         return switch (self) {
@@ -19,6 +21,7 @@ pub const Object = union(ObjectType) {
             .boolean => ObjectType.boolean,
             .null => ObjectType.null,
             .return_obj => ObjectType.return_obj,
+            .error_obj => ObjectType.error_obj,
         };
     }
 
@@ -28,6 +31,14 @@ pub const Object = union(ObjectType) {
             .boolean => try std.fmt.allocPrint(allocator, "{any}", .{self.boolean}),
             .null => "null",
             .return_obj => try self.return_obj.inspect(allocator),
+            .error_obj => try std.fmt.allocPrint(allocator, "ERROR: {s}", .{self.error_obj}),
         };
+    }
+
+    pub fn deinit(self: Object, allocator: std.mem.Allocator) void {
+        switch (self) {
+            .error_obj => allocator.free(self.error_obj),
+            else => {},
+        }
     }
 };
