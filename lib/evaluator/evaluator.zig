@@ -4,6 +4,7 @@ const ast = @import("ast");
 const Object = @import("object").Object;
 const Lexer = @import("lexer").Lexer;
 const Parser = @import("parser").Parser;
+const Environment = @import("environment").Environment;
 
 fn newError(allocator: std.mem.Allocator, comptime format: []const u8, args: anytype) !Object {
     const error_message = try std.fmt.allocPrint(allocator, format, args);
@@ -19,23 +20,32 @@ fn isError(obj: ?Object) bool {
 
 const EvalError = error{OutOfMemory};
 
-pub fn eval(allocator: std.mem.Allocator, node: ast.Node) EvalError!?Object {
-    return switch (node.nodeType()) {
+pub fn eval(allocator: std.mem.Allocator, node: ast.Node, env: *Environment) EvalError!?Object {
+    switch (node.nodeType()) {
         .Program => {
             const program_node: *ast.Program = @ptrCast(@alignCast(node.ptr));
-            return try evalProgram(allocator, program_node.statements.items);
+            return try evalProgram(allocator, program_node.statements.items, env);
+        },
+        .LetStatement => {
+            const let_node: *ast.LetStatement = @ptrCast(@alignCast(node.ptr));
+            const value = try eval(allocator, let_node.value.?.node, env);
+            if (isError(value)) {
+                return value;
+            }
+            const key = try allocator.dupe(u8, let_node.name.?.value);
+            try env.set(key, value.?);
         },
         .ExpressionStatement => {
             const expr_stmt_node: *ast.ExpressionStatement = @ptrCast(@alignCast(node.ptr));
-            return try eval(allocator, expr_stmt_node.expression.?.node);
+            return try eval(allocator, expr_stmt_node.expression.?.node, env);
         },
         .BlockStatement => {
             const block_node: *ast.BlockStatement = @ptrCast(@alignCast(node.ptr));
-            return try evalBlockStatement(allocator, block_node.statements.items);
+            return try evalBlockStatement(allocator, block_node.statements.items, env);
         },
         .ReturnStatement => {
             const return_node: *ast.ReturnStatement = @ptrCast(@alignCast(node.ptr));
-            var return_value = try eval(allocator, return_node.return_value.?.node);
+            var return_value = try eval(allocator, return_node.return_value.?.node, env);
             if (isError(return_value)) {
                 return return_value;
             }
@@ -43,7 +53,7 @@ pub fn eval(allocator: std.mem.Allocator, node: ast.Node) EvalError!?Object {
         },
         .PrefixExpression => {
             const prefix_node: *ast.PrefixExpression = @ptrCast(@alignCast(node.ptr));
-            if (try eval(allocator, prefix_node.right.?.node)) |right| {
+            if (try eval(allocator, prefix_node.right.?.node, env)) |right| {
                 if (isError(right)) {
                     return right;
                 }
@@ -53,11 +63,11 @@ pub fn eval(allocator: std.mem.Allocator, node: ast.Node) EvalError!?Object {
         },
         .InfixExpression => {
             const infix_node: *ast.InfixExpression = @ptrCast(@alignCast(node.ptr));
-            if (try eval(allocator, infix_node.left.node)) |left| {
+            if (try eval(allocator, infix_node.left.node, env)) |left| {
                 if (isError(left)) {
                     return left;
                 }
-                if (try eval(allocator, infix_node.right.?.node)) |right| {
+                if (try eval(allocator, infix_node.right.?.node, env)) |right| {
                     if (isError(right)) {
                         return right;
                     }
@@ -67,7 +77,10 @@ pub fn eval(allocator: std.mem.Allocator, node: ast.Node) EvalError!?Object {
             return null;
         },
         .IfExpression => {
-            return try evalIfExpression(allocator, node);
+            return try evalIfExpression(allocator, node, env);
+        },
+        .Identifier => {
+            return try evalIdentifier(allocator, node, env);
         },
         .IntegerLiteral => {
             const int_node: *ast.IntegerLiteral = @ptrCast(@alignCast(node.ptr));
@@ -78,39 +91,50 @@ pub fn eval(allocator: std.mem.Allocator, node: ast.Node) EvalError!?Object {
             return Object{ .boolean = bool_node.value };
         },
         else => return null,
-    };
+    }
+    return null;
 }
 
-fn evalProgram(allocator: std.mem.Allocator, statements: []ast.Statement) !?Object {
+fn evalProgram(allocator: std.mem.Allocator, statements: []ast.Statement, env: *Environment) !?Object {
     var result: ?Object = null;
 
     for (statements) |stmt| {
-        result = try eval(allocator, stmt.node);
+        result = try eval(allocator, stmt.node, env);
 
-        switch (result.?) {
-            .return_obj => |val| {
-                return val.*;
-            },
-            .error_obj => {
-                return result;
-            },
-            else => {},
+        if (result) |r| {
+            switch (r) {
+                .return_obj => |val| {
+                    return val.*;
+                },
+                .error_obj => {
+                    return result;
+                },
+                else => {},
+            }
         }
     }
 
     return result;
 }
 
-fn evalIfExpression(allocator: std.mem.Allocator, node: ast.Node) !?Object {
+fn evalIdentifier(allocator: std.mem.Allocator, node: ast.Node, env: *Environment) !Object {
+    const ident_node: *ast.Identifier = @ptrCast(@alignCast(node.ptr));
+    if (env.get(ident_node.value)) |val| {
+        return val;
+    }
+    return try newError(allocator, "identifier not found: {s}", .{ident_node.value});
+}
+
+fn evalIfExpression(allocator: std.mem.Allocator, node: ast.Node, env: *Environment) !?Object {
     const if_node: *ast.IfExpression = @ptrCast(@alignCast(node.ptr));
-    if (try eval(allocator, if_node.condition.?.node)) |condition| {
+    if (try eval(allocator, if_node.condition.?.node, env)) |condition| {
         if (isError(condition)) {
             return condition;
         }
         if (isTruthy(condition)) {
-            return try eval(allocator, if_node.consequence.?.statement().node);
+            return try eval(allocator, if_node.consequence.?.statement().node, env);
         } else if (if_node.alternative) |alt| {
-            return try eval(allocator, alt.statement().node);
+            return try eval(allocator, alt.statement().node, env);
         }
     }
     return Object{ .null = {} };
@@ -186,11 +210,11 @@ fn evalBangOperatorExpression(right: Object) Object {
     };
 }
 
-fn evalBlockStatement(allocator: std.mem.Allocator, statements: []ast.Statement) !?Object {
+fn evalBlockStatement(allocator: std.mem.Allocator, statements: []ast.Statement, env: *Environment) !?Object {
     var result: ?Object = null;
 
     for (statements) |stmt| {
-        result = try eval(allocator, stmt.node);
+        result = try eval(allocator, stmt.node, env);
 
         if (result) |r| {
             if (r.getType() == .return_obj or r.getType() == .error_obj) {
@@ -241,7 +265,10 @@ fn testEval(allocator: std.mem.Allocator, input: []const u8) !?Object {
 
     try p.parseProgram();
 
-    return try eval(allocator, p.program.node());
+    const env = try Environment.init(allocator);
+    defer env.deinit(allocator);
+
+    return try eval(allocator, p.program.node(), env);
 }
 
 fn testIntegerObject(obj: Object, expected: i64) bool {
@@ -382,7 +409,7 @@ test "test error handling" {
         .{ .input = "5; true + false; 5", .expected_message = "unknown operator: boolean + boolean" },
         .{ .input = "if (10 > 1) { true + false; }", .expected_message = "unknown operator: boolean + boolean" },
         .{ .input = "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }", .expected_message = "unknown operator: boolean + boolean" },
-        // .{ .input = "foobar", .expected_message = "identifier not found: foobar" },
+        .{ .input = "foobar", .expected_message = "identifier not found: foobar" },
     };
 
     for (tests) |tt| {
@@ -395,5 +422,24 @@ test "test error handling" {
             },
             else => try testing.expect(false),
         }
+    }
+}
+
+test "test let statements" {
+    const tests = [_]struct {
+        input: []const u8,
+        expected: i64,
+    }{
+        .{ .input = "let a = 5; a;", .expected = 5 },
+        .{ .input = "let a = 5 * 5; a;", .expected = 25 },
+        .{ .input = "let a = 5; let b = a; b;", .expected = 5 },
+        .{ .input = "let a = 5; let b = a; let c = a + b + 5; c;", .expected = 15 },
+    };
+
+    for (tests) |tt| {
+        const allocator = std.testing.allocator;
+        const evaluated = try testEval(allocator, tt.input);
+        defer evaluated.?.deinit(allocator);
+        try testing.expect(testIntegerObject(evaluated.?, tt.expected));
     }
 }

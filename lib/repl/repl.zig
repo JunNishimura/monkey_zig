@@ -2,6 +2,7 @@ const std = @import("std");
 const lexer = @import("lexer");
 const parser = @import("parser");
 const evaluator = @import("evaluator");
+const Environment = @import("environment").Environment;
 
 const prompt = ">> ";
 
@@ -10,6 +11,8 @@ pub fn start(
 ) !void {
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
+    const env = try Environment.init(allocator);
+    defer env.deinit(allocator);
 
     while (true) {
         var buf: [1024]u8 = undefined;
@@ -34,10 +37,11 @@ pub fn start(
                 }
             }
 
-            const eval_result = evaluator.eval(program.node());
+            const eval_result = try evaluator.eval(allocator, program.node(), env);
             if (eval_result) |obj| {
                 const inspect = try obj.inspect(allocator);
                 defer allocator.free(inspect);
+                defer obj.deinit(allocator);
                 try stdout.print("{s}\n", .{inspect});
             } else {
                 try stdout.print("Evaluation returned null.\n", .{});
