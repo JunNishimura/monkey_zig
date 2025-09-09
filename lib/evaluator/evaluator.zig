@@ -2,9 +2,10 @@ const std = @import("std");
 const testing = std.testing;
 const ast = @import("ast");
 const Object = @import("object").Object;
+const Environment = @import("object").Environment;
+const Function = @import("object").Function;
 const Lexer = @import("lexer").Lexer;
 const Parser = @import("parser").Parser;
-const Environment = @import("environment").Environment;
 
 fn newError(allocator: std.mem.Allocator, comptime format: []const u8, args: anytype) !Object {
     const error_message = try std.fmt.allocPrint(allocator, format, args);

@@ -33,10 +33,6 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("lib/token/token.zig"),
         .target = target,
     });
-    const obj_mod = b.addModule("object", .{
-        .root_source_file = b.path("lib/object/object.zig"),
-        .target = target,
-    });
     const lexer_mod = b.addModule("lexer", .{
         .root_source_file = b.path("lib/lexer/lexer.zig"),
         .target = target,
@@ -56,11 +52,11 @@ pub fn build(b: *std.Build) void {
             .{ .name = "ast", .module = ast_mod },
         },
     });
-    const env_mod = b.addModule("environment", .{
-        .root_source_file = b.path("lib/environment/environment.zig"),
+    const obj_mod = b.addModule("object", .{
+        .root_source_file = b.path("lib/object/object.zig"),
         .target = target,
         .imports = &.{
-            .{ .name = "object", .module = obj_mod },
+            .{ .name = "ast", .module = ast_mod },
         },
     });
     const eval_mod = b.addModule("evaluator", .{
@@ -71,7 +67,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "lexer", .module = lexer_mod },
             .{ .name = "parser", .module = parser_mod },
             .{ .name = "object", .module = obj_mod },
-            .{ .name = "environment", .module = env_mod },
         },
     });
     const repl_mod = b.createModule(.{
@@ -81,7 +76,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "lexer", .module = lexer_mod },
             .{ .name = "parser", .module = parser_mod },
             .{ .name = "evaluator", .module = eval_mod },
-            .{ .name = "environment", .module = env_mod },
         },
     });
 
@@ -128,7 +122,6 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "repl", .module = repl_mod },
                 .{ .name = "ast", .module = ast_mod },
                 .{ .name = "parser", .module = parser_mod },
-                .{ .name = "environment", .module = env_mod },
                 .{ .name = "evaluator", .module = eval_mod },
             },
         }),
@@ -210,7 +203,6 @@ pub fn build(b: *std.Build) void {
                     .{ .name = "lexer", .module = lexer_mod },
                     .{ .name = "parser", .module = parser_mod },
                     .{ .name = "ast", .module = ast_mod },
-                    .{ .name = "environment", .module = env_mod },
                 },
             }),
         },

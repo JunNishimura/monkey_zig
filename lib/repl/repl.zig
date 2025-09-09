@@ -2,7 +2,7 @@ const std = @import("std");
 const lexer = @import("lexer");
 const parser = @import("parser");
 const evaluator = @import("evaluator");
-const Environment = @import("environment").Environment;
+const Environment = @import("object").Environment;
 
 const prompt = ">> ";
 
