@@ -80,6 +80,13 @@ pub fn eval(allocator: std.mem.Allocator, node: ast.Node, env: *Environment) Eva
         .IfExpression => {
             return try evalIfExpression(allocator, node, env);
         },
+        .FunctionLiteral => {
+            const func_node: *ast.FunctionLiteral = @ptrCast(@alignCast(node.ptr));
+            const params = func_node.parameters.items;
+            const body = func_node.body.?;
+            const func_obj = try Function.init(allocator, params, body, env);
+            return Object{ .function_obj = func_obj };
+        },
         .Identifier => {
             return try evalIdentifier(allocator, node, env);
         },
@@ -251,25 +258,21 @@ test "eval integer expression" {
 
     for (tests) |tt| {
         const allocator = std.testing.allocator;
-        const evaluated = try testEval(allocator, tt.input);
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        try p.parseProgram();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluated = try eval(allocator, p.program.node(), env);
         defer evaluated.?.deinit(allocator);
         try testing.expect(testIntegerObject(evaluated.?, tt.expected));
     }
-}
-
-fn testEval(allocator: std.mem.Allocator, input: []const u8) !?Object {
-    const l = try Lexer.init(allocator, input);
-    defer allocator.destroy(l);
-
-    const p = try Parser.init(allocator, l);
-    defer p.deinit();
-
-    try p.parseProgram();
-
-    const env = try Environment.init(allocator);
-    defer env.deinit(allocator);
-
-    return try eval(allocator, p.program.node(), env);
 }
 
 fn testIntegerObject(obj: Object, expected: i64) bool {
@@ -309,7 +312,18 @@ test "eval boolean expression" {
 
     for (tests) |tt| {
         const allocator = std.testing.allocator;
-        const evaluated = try testEval(allocator, tt.input);
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        try p.parseProgram();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluated = try eval(allocator, p.program.node(), env);
         defer evaluated.?.deinit(allocator);
         try testing.expect(testBooleanObject(evaluated.?, tt.expected));
     }
@@ -339,7 +353,18 @@ test "test bang operator" {
 
     for (tests) |tt| {
         const allocator = std.testing.allocator;
-        const evaluated = try testEval(allocator, tt.input);
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        try p.parseProgram();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluated = try eval(allocator, p.program.node(), env);
         defer evaluated.?.deinit(allocator);
         try testing.expect(testBooleanObject(evaluated.?, tt.expected));
     }
@@ -361,7 +386,18 @@ test "test if-else expressions" {
 
     for (tests) |tt| {
         const allocator = std.testing.allocator;
-        const evaluated = try testEval(allocator, tt.input);
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        try p.parseProgram();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluated = try eval(allocator, p.program.node(), env);
         defer evaluated.?.deinit(allocator);
         if (tt.expected) |expected| {
             try testing.expect(testIntegerObject(evaluated.?, expected));
@@ -392,7 +428,18 @@ test "test return statements" {
 
     for (tests) |tt| {
         const allocator = std.testing.allocator;
-        const evaluated = try testEval(allocator, tt.input);
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        try p.parseProgram();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluated = try eval(allocator, p.program.node(), env);
         defer evaluated.?.deinit(allocator);
         try testing.expect(testIntegerObject(evaluated.?, tt.expected));
     }
@@ -415,7 +462,18 @@ test "test error handling" {
 
     for (tests) |tt| {
         const allocator = std.testing.allocator;
-        const evaluated = try testEval(allocator, tt.input);
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        try p.parseProgram();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluated = try eval(allocator, p.program.node(), env);
         defer evaluated.?.deinit(allocator);
         switch (evaluated.?) {
             .error_obj => |err| {
@@ -439,8 +497,49 @@ test "test let statements" {
 
     for (tests) |tt| {
         const allocator = std.testing.allocator;
-        const evaluated = try testEval(allocator, tt.input);
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        try p.parseProgram();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluated = try eval(allocator, p.program.node(), env);
         defer evaluated.?.deinit(allocator);
         try testing.expect(testIntegerObject(evaluated.?, tt.expected));
+    }
+}
+
+test "test function object" {
+    const input = "fn(x) { x + 2; };";
+
+    const allocator = std.testing.allocator;
+
+    const l = try Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    try p.parseProgram();
+
+    const env = try Environment.init(allocator);
+    defer env.deinit(allocator);
+
+    const evaluated = try eval(allocator, p.program.node(), env);
+    defer evaluated.?.deinit(allocator);
+
+    switch (evaluated.?) {
+        .function_obj => |func| {
+            try testing.expect(func.parameters.len == 1);
+            try testing.expect(std.mem.eql(u8, func.parameters[0].value, "x"));
+            const body_str = try func.body.string();
+            try testing.expect(std.mem.eql(u8, body_str, "(x + 2)"));
+        },
+        else => try testing.expect(false),
     }
 }
