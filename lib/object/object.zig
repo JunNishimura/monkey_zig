@@ -57,6 +57,7 @@ pub const Object = struct {
     deinit_fn: *const fn (ptr: *anyopaque) void,
     set_is_ident_fn: *const fn (ptr: *anyopaque, is_ident: bool) void,
     is_ident_fn: *const fn (ptr: *anyopaque) bool,
+    set_env_fn: *const fn (ptr: *anyopaque, env: *Environment) void,
 
     pub fn init(ptr: anytype) Object {
         const T = @TypeOf(ptr);
@@ -83,6 +84,10 @@ pub const Object = struct {
                 const self: T = @ptrCast(@alignCast(pointer));
                 return ptr_info.pointer.child.isIdent(self);
             }
+            pub fn setEnv(pointer: *anyopaque, env: *Environment) void {
+                const self: T = @ptrCast(@alignCast(pointer));
+                return ptr_info.pointer.child.setEnv(self, env);
+            }
         };
 
         return .{
@@ -92,6 +97,7 @@ pub const Object = struct {
             .deinit_fn = gen.deinit,
             .set_is_ident_fn = gen.setIsIdent,
             .is_ident_fn = gen.isIdent,
+            .set_env_fn = gen.setEnv,
         };
     }
 
@@ -117,6 +123,10 @@ pub const Object = struct {
 
     pub fn isIdent(self: Object) bool {
         return self.is_ident_fn(self.ptr);
+    }
+
+    pub fn setEnv(self: Object, env: *Environment) void {
+        self.set_env_fn(self.ptr, env);
     }
 };
 
@@ -160,6 +170,8 @@ pub const Integer = struct {
     pub fn isIdent(self: *Integer) bool {
         return self.is_ident;
     }
+
+    pub fn setEnv(_: *Integer, _: *Environment) void {}
 };
 
 pub const Boolean = struct {
@@ -202,6 +214,8 @@ pub const Boolean = struct {
     pub fn isIdent(self: *Boolean) bool {
         return self.is_ident;
     }
+
+    pub fn setEnv(_: *Boolean, _: *Environment) void {}
 };
 
 pub const Null = struct {
@@ -242,6 +256,8 @@ pub const Null = struct {
     pub fn isIdent(self: *Null) bool {
         return self.is_ident;
     }
+
+    pub fn setEnv(_: *Null, _: *Environment) void {}
 };
 
 pub const Error = struct {
@@ -284,6 +300,8 @@ pub const Error = struct {
     pub fn isIdent(_: *Error) bool {
         return false;
     }
+
+    pub fn setEnv(_: *Error, _: *Environment) void {}
 };
 
 pub const Return = struct {
@@ -329,6 +347,8 @@ pub const Return = struct {
     pub fn isIdent(self: *Return) bool {
         return self.is_ident;
     }
+
+    pub fn setEnv(_: *Return, _: *Environment) void {}
 };
 
 pub const Function = struct {
@@ -337,6 +357,7 @@ pub const Function = struct {
     parameters: []*ast.Identifier,
     body: *ast.BlockStatement,
     env: *Environment,
+    extended_env: ?*Environment,
     str_list: std.ArrayList(u8),
     is_ident: bool,
 
@@ -348,6 +369,7 @@ pub const Function = struct {
             .parameters = parameters,
             .body = body,
             .env = env,
+            .extended_env = null,
             .str_list = std.ArrayList(u8).init(allocator),
             .is_ident = false,
         };
@@ -359,6 +381,9 @@ pub const Function = struct {
     }
 
     pub fn deinit(self: *Function) void {
+        if (self.extended_env) |ext_env| {
+            ext_env.deinit(self.allocator);
+        }
         self.str_list.deinit();
         self.allocator.destroy(self);
     }
@@ -387,5 +412,9 @@ pub const Function = struct {
 
     pub fn isIdent(self: *Function) bool {
         return self.is_ident;
+    }
+
+    pub fn setEnv(self: *Function, env: *Environment) void {
+        self.extended_env = env;
     }
 };

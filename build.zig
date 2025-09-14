@@ -74,7 +74,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .imports = &.{
             .{ .name = "lexer", .module = lexer_mod },
+            .{ .name = "ast", .module = ast_mod },
             .{ .name = "parser", .module = parser_mod },
+            .{ .name = "object", .module = obj_mod },
             .{ .name = "evaluator", .module = eval_mod },
         },
     });

@@ -304,11 +304,16 @@ pub const Evaluator = struct {
             .function_obj => {
                 const func: *Function = @ptrCast(@alignCast(function.ptr));
                 const extended_env = try extendFunctionEnv(self.allocator, func, args);
-                defer extended_env.deinit(self.allocator);
 
                 const evaluated = try self.eval(func.body.statement().node, extended_env);
                 if (evaluated.?.getType() == .return_obj) {
                     try self.addEvaluated(evaluated.?);
+                }
+                if (evaluated.?.getType() == .function_obj) {
+                    const func_obj: *Function = @ptrCast(@alignCast(evaluated.?.ptr));
+                    func_obj.extended_env = extended_env;
+                } else {
+                    extended_env.deinit(self.allocator);
                 }
 
                 return unwrapReturnValue(evaluated);
@@ -391,7 +396,8 @@ test "eval integer expression" {
         const p = try Parser.init(allocator, l);
         defer p.deinit();
 
-        try p.parseProgram();
+        const program = try p.parseProgram();
+        defer program.deinit();
 
         const env = try Environment.init(allocator);
         defer env.deinit(allocator);
@@ -399,7 +405,7 @@ test "eval integer expression" {
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
 
-        const evaluated = try evaluator.eval(p.program.node(), env);
+        const evaluated = try evaluator.eval(program.node(), env);
 
         try testing.expect(testIntegerObject(evaluated.?, tt.expected));
     }
@@ -449,7 +455,8 @@ test "eval boolean expression" {
         const p = try Parser.init(allocator, l);
         defer p.deinit();
 
-        try p.parseProgram();
+        const program = try p.parseProgram();
+        defer program.deinit();
 
         const env = try Environment.init(allocator);
         defer env.deinit(allocator);
@@ -457,7 +464,7 @@ test "eval boolean expression" {
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
 
-        const evaluated = try evaluator.eval(p.program.node(), env);
+        const evaluated = try evaluator.eval(program.node(), env);
         try testing.expect(testBooleanObject(evaluated.?, tt.expected));
     }
 }
@@ -493,7 +500,8 @@ test "test bang operator" {
         const p = try Parser.init(allocator, l);
         defer p.deinit();
 
-        try p.parseProgram();
+        const program = try p.parseProgram();
+        defer program.deinit();
 
         const env = try Environment.init(allocator);
         defer env.deinit(allocator);
@@ -501,7 +509,7 @@ test "test bang operator" {
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
 
-        const evaluated = try evaluator.eval(p.program.node(), env);
+        const evaluated = try evaluator.eval(program.node(), env);
         try testing.expect(testBooleanObject(evaluated.?, tt.expected));
     }
 }
@@ -528,7 +536,8 @@ test "test if-else expressions" {
         const p = try Parser.init(allocator, l);
         defer p.deinit();
 
-        try p.parseProgram();
+        const program = try p.parseProgram();
+        defer program.deinit();
 
         const env = try Environment.init(allocator);
         defer env.deinit(allocator);
@@ -536,7 +545,7 @@ test "test if-else expressions" {
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
 
-        const evaluated = try evaluator.eval(p.program.node(), env);
+        const evaluated = try evaluator.eval(program.node(), env);
         if (tt.expected) |expected| {
             try testing.expect(testIntegerObject(evaluated.?, expected));
         } else {
@@ -572,7 +581,8 @@ test "test return statements" {
         const p = try Parser.init(allocator, l);
         defer p.deinit();
 
-        try p.parseProgram();
+        const program = try p.parseProgram();
+        defer program.deinit();
 
         const env = try Environment.init(allocator);
         defer env.deinit(allocator);
@@ -580,7 +590,7 @@ test "test return statements" {
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
 
-        const evaluated = try evaluator.eval(p.program.node(), env);
+        const evaluated = try evaluator.eval(program.node(), env);
         try testing.expect(testIntegerObject(evaluated.?, tt.expected));
     }
 }
@@ -608,7 +618,8 @@ test "test error handling" {
         const p = try Parser.init(allocator, l);
         defer p.deinit();
 
-        try p.parseProgram();
+        const program = try p.parseProgram();
+        defer program.deinit();
 
         const env = try Environment.init(allocator);
         defer env.deinit(allocator);
@@ -616,7 +627,7 @@ test "test error handling" {
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
 
-        const evaluated = try evaluator.eval(p.program.node(), env);
+        const evaluated = try evaluator.eval(program.node(), env);
         switch (evaluated.?.getType()) {
             .error_obj => {
                 const err_obj: *obj.Error = @ptrCast(@alignCast(evaluated.?.ptr));
@@ -646,7 +657,8 @@ test "test let statements" {
         const p = try Parser.init(allocator, l);
         defer p.deinit();
 
-        try p.parseProgram();
+        const program = try p.parseProgram();
+        defer program.deinit();
 
         const env = try Environment.init(allocator);
         defer env.deinit(allocator);
@@ -654,7 +666,7 @@ test "test let statements" {
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
 
-        const evaluated = try evaluator.eval(p.program.node(), env);
+        const evaluated = try evaluator.eval(program.node(), env);
         try testing.expect(testIntegerObject(evaluated.?, tt.expected));
     }
 }
@@ -670,7 +682,8 @@ test "test function object" {
     const p = try Parser.init(allocator, l);
     defer p.deinit();
 
-    try p.parseProgram();
+    const program = try p.parseProgram();
+    defer program.deinit();
 
     const env = try Environment.init(allocator);
     defer env.deinit(allocator);
@@ -678,7 +691,7 @@ test "test function object" {
     const evaluator = try Evaluator.init(allocator);
     defer evaluator.deinit();
 
-    const evaluated = try evaluator.eval(p.program.node(), env);
+    const evaluated = try evaluator.eval(program.node(), env);
     switch (evaluated.?.getType()) {
         .function_obj => {
             const func: *Function = @ptrCast(@alignCast(evaluated.?.ptr));
@@ -712,7 +725,8 @@ test "test function application" {
         const p = try Parser.init(allocator, l);
         defer p.deinit();
 
-        try p.parseProgram();
+        const program = try p.parseProgram();
+        defer program.deinit();
 
         const env = try Environment.init(allocator);
         defer env.deinit(allocator);
@@ -720,7 +734,7 @@ test "test function application" {
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
 
-        const evaluated = try evaluator.eval(p.program.node(), env);
+        const evaluated = try evaluator.eval(program.node(), env);
         try testing.expect(testIntegerObject(evaluated.?, tt.expected));
     }
 }
