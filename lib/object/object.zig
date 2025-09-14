@@ -289,7 +289,7 @@ pub const Error = struct {
 pub const Return = struct {
     allocator: std.mem.Allocator,
     type: ObjectType,
-    value: Object,
+    value: ?Object,
     is_ident: bool,
 
     pub fn init(allocator: std.mem.Allocator, value: Object) !*Return {
@@ -304,7 +304,7 @@ pub const Return = struct {
     }
 
     pub fn inspect(self: *Return, allocator: std.mem.Allocator) ![]const u8 {
-        return self.value.inspect(allocator);
+        return self.value.?.inspect(allocator);
     }
 
     pub fn getType(self: *Return) ObjectType {
@@ -312,7 +312,9 @@ pub const Return = struct {
     }
 
     pub fn deinit(self: *Return) void {
-        self.value.deinit();
+        if (self.value) |v| {
+            v.deinit();
+        }
         self.allocator.destroy(self);
     }
 
@@ -328,47 +330,6 @@ pub const Return = struct {
         return self.is_ident;
     }
 };
-
-// pub const Object = union(ObjectType) {
-//     integer: i64,
-//     boolean: bool,
-//     null: void,
-//     return_obj: *Object,
-//     error_obj: []const u8,
-//     function_obj: *Function,
-
-//     pub fn getType(self: Object) ObjectType {
-//         return switch (self) {
-//             .integer => ObjectType.integer,
-//             .boolean => ObjectType.boolean,
-//             .null => ObjectType.null,
-//             .return_obj => ObjectType.return_obj,
-//             .error_obj => ObjectType.error_obj,
-//             .function_obj => ObjectType.function_obj,
-//         };
-//     }
-
-//     pub fn inspect(self: Object, allocator: std.mem.Allocator) ![]const u8 {
-//         return switch (self) {
-//             .boolean => try std.fmt.allocPrint(allocator, "{any}", .{self.boolean}),
-//             .null => "null",
-//             .return_obj => try self.return_obj.inspect(allocator),
-//             .function_obj => try self.function_obj.inspect(allocator),
-//         };
-//     }
-
-//     pub fn init(allocator: std.mem.Allocator, )
-
-//     pub fn deinit(self: Object, allocator: std.mem.Allocator) void {
-//         switch (self) {
-//             .error_obj => allocator.free(self.error_obj),
-//             .function_obj => |func| {
-//                 func.deinit(allocator);
-//             },
-//             else => {},
-//         }
-//     }
-// };
 
 pub const Function = struct {
     allocator: std.mem.Allocator,

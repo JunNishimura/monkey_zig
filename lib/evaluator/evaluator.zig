@@ -64,6 +64,24 @@ pub const Evaluator = struct {
                 const body = func_node.body.?;
                 return (try Function.init(self.allocator, params, body, env)).object();
             },
+            .CallExpression => {
+                const call_node: *ast.CallExpression = @ptrCast(@alignCast(node.ptr));
+                const function = try self.eval(call_node.function.node, env);
+                if (function.?.isError()) {
+                    return function;
+                }
+                try self.addEvaluated(function.?);
+                const args = try self.evalExpressions(self.allocator, call_node.arguments.items, env);
+                defer args.deinit();
+
+                const args_items = args.items;
+                if (args_items.len == 1 and args_items[0].isError()) {
+                    std.log.warn("args[0]: {any}\n", .{args_items[0]});
+                    return args_items[0];
+                }
+
+                return try self.applyFunction(function.?, args_items);
+            },
             .IfExpression => {
                 return try self.evalIfExpression(node, env);
             },
@@ -101,9 +119,6 @@ pub const Evaluator = struct {
                 const bool_node: *ast.Boolean = @ptrCast(@alignCast(node.ptr));
                 const bool_obj = try obj.Boolean.init(self.allocator, bool_node.value);
                 return bool_obj.object();
-            },
-            else => {
-                return null;
             },
         }
         return null;
@@ -267,6 +282,64 @@ pub const Evaluator = struct {
         return try self.newError("identifier not found: {s}", .{ident_node.value});
     }
 
+    fn evalExpressions(self: *Evaluator, allocator: std.mem.Allocator, expressions: []ast.Expression, env: *Environment) !std.ArrayList(obj.Object) {
+        var result = std.ArrayList(obj.Object).init(allocator);
+
+        for (expressions) |expr| {
+            const evaluated = try self.eval(expr.node, env);
+            if (evaluated.?.isError()) {
+                result.deinit(); // cleanup before returning
+                try result.append(evaluated.?);
+                return result;
+            }
+            try result.append(evaluated.?);
+            try self.addEvaluated(evaluated.?);
+        }
+
+        return result;
+    }
+
+    fn applyFunction(self: *Evaluator, function: obj.Object, args: []obj.Object) !?obj.Object {
+        switch (function.getType()) {
+            .function_obj => {
+                const func: *Function = @ptrCast(@alignCast(function.ptr));
+                const extended_env = try extendFunctionEnv(self.allocator, func, args);
+                defer extended_env.deinit(self.allocator);
+
+                const evaluated = try self.eval(func.body.statement().node, extended_env);
+                if (evaluated.?.getType() == .return_obj) {
+                    try self.addEvaluated(evaluated.?);
+                }
+
+                return unwrapReturnValue(evaluated);
+            },
+            else => return try self.newError("not a function: {s}", .{@tagName(function.getType())}),
+        }
+    }
+
+    fn extendFunctionEnv(allocator: std.mem.Allocator, func: *Function, args: []obj.Object) !*Environment {
+        const env = try Environment.initEnclosed(allocator, func.env);
+
+        for (func.parameters, 0..) |param, i| {
+            try env.set(param.value, args[i]);
+        }
+
+        return env;
+    }
+
+    fn unwrapReturnValue(object: ?obj.Object) ?obj.Object {
+        if (object) |o| {
+            if (o.getType() == .return_obj) {
+                var return_obj: *obj.Return = @ptrCast(@alignCast(o.ptr));
+                const value = return_obj.value.?;
+                return_obj.value = null; // Prevent double free
+                return value;
+            }
+            return o;
+        }
+        return null;
+    }
+
     fn newError(self: *Evaluator, comptime format: []const u8, args: anytype) !obj.Object {
         const error_obj = try obj.Error.init(self.allocator, format, args);
         return error_obj.object();
@@ -287,76 +360,6 @@ pub const Evaluator = struct {
         try self.evaluated.append(object);
     }
 };
-
-// pub fn eval(allocator: std.mem.Allocator, node: ast.Node, env: *Environment) EvalError!?Object {
-//     switch (node.nodeType()) {
-//         .CallExpression => {
-//             const call_node: *ast.CallExpression = @ptrCast(@alignCast(node.ptr));
-//             const function = try eval(allocator, call_node.function.node, env);
-//             if (isError(function)) {
-//                 return function;
-//             }
-//             const args = try evalExpressions(allocator, call_node.arguments.items, env);
-//             defer args.deinit();
-//             const args_slice = args.items;
-//             if (args_slice.len == 1 and isError(args_slice[0])) {
-//                 return args_slice[0];
-//             }
-
-//             return try applyFunction(allocator, function.?, args_slice);
-//         },
-//     }
-//     return null;
-// }
-
-// fn applyFunction(allocator: std.mem.Allocator, function: Object, args: []Object) !?Object {
-//     switch (function) {
-//         .function_obj => |func| {
-//             const extended_env = try extendFunctionEnv(allocator, func, args);
-//             defer extended_env.deinit(allocator);
-
-//             const evaluated = try eval(allocator, func.body.statement().node, extended_env);
-//             return unwrapReturnValue(evaluated);
-//         },
-//         else => return try newError(allocator, "not a function: {s}", .{@tagName(function.getType())}),
-//     }
-// }
-
-// fn unwrapReturnValue(obj: ?Object) ?Object {
-//     if (obj) |o| {
-//         if (o.getType() == .return_obj) {
-//             return o.return_obj.*;
-//         }
-//         return o;
-//     }
-//     return null;
-// }
-
-// fn extendFunctionEnv(allocator: std.mem.Allocator, func: *Function, args: []Object) !*Environment {
-//     const env = try Environment.initEnclosed(allocator, func.env);
-
-//     for (func.parameters, 0..) |param, i| {
-//         try env.set(param.value, args[i]);
-//     }
-
-//     return env;
-// }
-
-// fn evalExpressions(allocator: std.mem.Allocator, expressions: []ast.Expression, env: *Environment) !std.ArrayList(Object) {
-//     var result = std.ArrayList(Object).init(allocator);
-
-//     for (expressions) |expr| {
-//         const evaluated = try eval(allocator, expr.node, env);
-//         if (isError(evaluated)) {
-//             result.deinit();
-//             try result.append(evaluated.?);
-//             return result;
-//         }
-//         try result.append(evaluated.?);
-//     }
-
-//     return result;
-// }
 
 test "eval integer expression" {
     const tests = [_]struct {
@@ -688,34 +691,36 @@ test "test function object" {
     }
 }
 
-// test "test function application" {
-//     const tests = [_]struct {
-//         input: []const u8,
-//         expected: i64,
-//     }{
-//         .{ .input = "let identity = fn(x) { x; }; identity(5);", .expected = 5 },
-//         .{ .input = "let identity = fn(x) { return x; }; identity(5);", .expected = 5 },
-//         .{ .input = "let double = fn(x) { x * 2; }; double(5);", .expected = 10 },
-//         .{ .input = "let add = fn(x, y) { x + y; }; add(5, 5);", .expected = 10 },
-//         .{ .input = "let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", .expected = 20 },
-//         .{ .input = "fn(x) { x; }(5)", .expected = 5 },
-//     };
+test "test function application" {
+    const tests = [_]struct {
+        input: []const u8,
+        expected: i64,
+    }{
+        .{ .input = "let identity = fn(x) { x; }; identity(5);", .expected = 5 },
+        .{ .input = "let identity = fn(x) { return x; }; identity(5);", .expected = 5 },
+        .{ .input = "let double = fn(x) { x * 2; }; double(5);", .expected = 10 },
+        .{ .input = "let add = fn(x, y) { x + y; }; add(5, 5);", .expected = 10 },
+        .{ .input = "let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", .expected = 20 },
+        .{ .input = "fn(x) { x; }(5)", .expected = 5 },
+    };
 
-//     for (tests) |tt| {
-//         const allocator = std.testing.allocator;
-//         const l = try Lexer.init(allocator, tt.input);
-//         defer allocator.destroy(l);
+    for (tests) |tt| {
+        const allocator = std.testing.allocator;
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
 
-//         const p = try Parser.init(allocator, l);
-//         defer p.deinit();
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
 
-//         try p.parseProgram();
+        try p.parseProgram();
 
-//         const env = try Environment.init(allocator);
-//         defer env.deinit(allocator);
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
 
-//         const evaluated = try eval(allocator, p.program.node(), env);
-//         defer evaluated.?.deinit(allocator);
-//         try testing.expect(testIntegerObject(evaluated.?, tt.expected));
-//     }
-// }
+        const evaluator = try Evaluator.init(allocator);
+        defer evaluator.deinit();
+
+        const evaluated = try evaluator.eval(p.program.node(), env);
+        try testing.expect(testIntegerObject(evaluated.?, tt.expected));
+    }
+}
