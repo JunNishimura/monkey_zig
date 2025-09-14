@@ -58,6 +58,12 @@ pub const Evaluator = struct {
                 try self.addEvaluated(value.?);
                 try env.set(let_node.name.?.value, value.?);
             },
+            .FunctionLiteral => {
+                const func_node: *ast.FunctionLiteral = @ptrCast(@alignCast(node.ptr));
+                const params = func_node.parameters.items;
+                const body = func_node.body.?;
+                return (try Function.init(self.allocator, params, body, env)).object();
+            },
             .IfExpression => {
                 return try self.evalIfExpression(node, env);
             },
@@ -284,13 +290,6 @@ pub const Evaluator = struct {
 
 // pub fn eval(allocator: std.mem.Allocator, node: ast.Node, env: *Environment) EvalError!?Object {
 //     switch (node.nodeType()) {
-//         .FunctionLiteral => {
-//             const func_node: *ast.FunctionLiteral = @ptrCast(@alignCast(node.ptr));
-//             const params = func_node.parameters.items;
-//             const body = func_node.body.?;
-//             const func_obj = try Function.init(allocator, params, body, env);
-//             return Object{ .function_obj = func_obj };
-//         },
 //         .CallExpression => {
 //             const call_node: *ast.CallExpression = @ptrCast(@alignCast(node.ptr));
 //             const function = try eval(allocator, call_node.function.node, env);
@@ -677,8 +676,9 @@ test "test function object" {
     defer evaluator.deinit();
 
     const evaluated = try evaluator.eval(p.program.node(), env);
-    switch (evaluated.?) {
-        .function_obj => |func| {
+    switch (evaluated.?.getType()) {
+        .function_obj => {
+            const func: *Function = @ptrCast(@alignCast(evaluated.?.ptr));
             try testing.expect(func.parameters.len == 1);
             try testing.expect(std.mem.eql(u8, func.parameters[0].value, "x"));
             const body_str = try func.body.string();
