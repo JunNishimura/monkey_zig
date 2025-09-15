@@ -28,6 +28,8 @@ pub const TokenType = enum {
     RParen,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
 
     Function,
     Let,
@@ -60,6 +62,8 @@ pub const TokenType = enum {
             .RParen => ")",
             .LBrace => "{",
             .RBrace => "}",
+            .LBracket => "[",
+            .RBracket => "]",
             .Function => "FUNCTION",
             .Let => "LET",
             .True => "TRUE",
