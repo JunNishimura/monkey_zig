@@ -243,6 +243,10 @@ pub const Evaluator = struct {
             const left_int: *obj.Integer = @ptrCast(@alignCast(left.ptr));
             const right_int: *obj.Integer = @ptrCast(@alignCast(right.ptr));
             return try self.evalIntegerInfixExpression(operator, left_int, right_int);
+        } else if (left.getType() == .string and right.getType() == .string) {
+            const left_str: *obj.String = @ptrCast(@alignCast(left.ptr));
+            const right_str: *obj.String = @ptrCast(@alignCast(right.ptr));
+            return try self.evalStringInfixExpression(operator, left_str, right_str);
         } else if (std.mem.eql(u8, operator, "==")) {
             const left_bool: *obj.Boolean = @ptrCast(@alignCast(left.ptr));
             const right_bool: *obj.Boolean = @ptrCast(@alignCast(right.ptr));
@@ -275,7 +279,16 @@ pub const Evaluator = struct {
         } else if (std.mem.eql(u8, operator, "!=")) {
             return (try obj.Boolean.init(self.allocator, left.value != right.value)).object();
         }
-        return try self.newError("unknown operator: integer {s} integer", .{operator});
+        return try self.newError("unknown operator: {s} {s} {s}", .{ @tagName(left.getType()), operator, @tagName(right.getType()) });
+    }
+
+    fn evalStringInfixExpression(self: *Evaluator, operator: []const u8, left: *obj.String, right: *obj.String) !?obj.Object {
+        if (std.mem.eql(u8, operator, "+")) {
+            const new_str = try std.mem.concat(self.allocator, u8, &[_][]const u8{ left.value, right.value });
+            defer self.allocator.free(new_str);
+            return (try obj.String.init(self.allocator, new_str)).object();
+        }
+        return try self.newError("unknown operator: {s} {s} {s}", .{ @tagName(left.getType()), operator, @tagName(right.getType()) });
     }
 
     fn evalIdentifier(self: *Evaluator, node: ast.Node, env: *Environment) EvalError!obj.Object {
@@ -431,6 +444,31 @@ test "eval string expression" {
 
     const allocator = std.testing.allocator;
 
+    const l = try Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+
+    const env = try Environment.init(allocator);
+    defer env.deinit(allocator);
+
+    const evaluator = try Evaluator.init(allocator);
+    defer evaluator.deinit();
+
+    const evaluated = try evaluator.eval(program.node(), env);
+    const str_obj: *obj.String = @ptrCast(@alignCast(evaluated.?.ptr));
+
+    try testing.expect(std.mem.eql(u8, str_obj.value, "hello world"));
+}
+
+test "eval string concatenation" {
+    const input = "\"hello\" + \" \" + \"world\"";
+
+    const allocator = std.testing.allocator;
     const l = try Lexer.init(allocator, input);
     defer allocator.destroy(l);
 
@@ -638,7 +676,8 @@ test "test error handling" {
         .{ .input = "5; true + false; 5", .expected_message = "unknown operator: boolean + boolean" },
         .{ .input = "if (10 > 1) { true + false; }", .expected_message = "unknown operator: boolean + boolean" },
         .{ .input = "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }", .expected_message = "unknown operator: boolean + boolean" },
-        // .{ .input = "foobar", .expected_message = "identifier not found: foobar" },
+        .{ .input = "foobar", .expected_message = "identifier not found: foobar" },
+        .{ .input = "\"Hello\" - \"World\"", .expected_message = "unknown operator: string - string" },
     };
 
     for (tests) |tt| {
