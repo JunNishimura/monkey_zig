@@ -61,6 +61,17 @@ pub const Lexer = struct {
         }
     }
 
+    fn readString(self: *Lexer) []const u8 {
+        const position = self.position + 1; // Skip the opening quote
+        while (true) {
+            self.readChar();
+            if (self.ch == '"' or self.ch == 0) {
+                break;
+            }
+        }
+        return self.input[position..self.position];
+    }
+
     pub fn nextToken(self: *Lexer) Token {
         var token: Token = .{ .type = .Illegal, .literal = "" };
 
@@ -119,6 +130,10 @@ pub const Lexer = struct {
             '}' => {
                 token = newToken(.RBrace, "}");
             },
+            '"' => {
+                token.type = .String;
+                token.literal = self.readString();
+            },
             0 => {
                 token = newToken(.Eof, "");
             },
@@ -175,6 +190,8 @@ test "test next token" {
         \\
         \\10 == 10;
         \\10 != 9;
+        \\"foobar"
+        \\"foo bar"
     ;
 
     const expected = [_]struct {
@@ -253,6 +270,8 @@ test "test next token" {
         .{ .expected_type = .NotEq, .expected_literal = "!=" },
         .{ .expected_type = .Int, .expected_literal = "9" },
         .{ .expected_type = .Semicolon, .expected_literal = ";" },
+        .{ .expected_type = .String, .expected_literal = "foobar" },
+        .{ .expected_type = .String, .expected_literal = "foo bar" },
         .{ .expected_type = .Eof, .expected_literal = "" },
     };
 

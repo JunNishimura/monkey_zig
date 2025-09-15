@@ -6,6 +6,7 @@ pub const TokenType = enum {
 
     Ident,
     Int,
+    String,
 
     Assign,
     Plus,
@@ -42,6 +43,7 @@ pub const TokenType = enum {
             .Eof => "EOF",
             .Ident => "IDENT",
             .Int => "INT",
+            .String => "STRING",
             .Assign => "=",
             .Plus => "+",
             .Minus => "-",
