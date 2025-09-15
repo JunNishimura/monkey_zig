@@ -115,12 +115,16 @@ pub const Evaluator = struct {
                 const int_obj = try obj.Integer.init(self.allocator, int_node.value orelse 0);
                 return int_obj.object();
             },
+            .StringLiteral => {
+                const str_node: *ast.StringLiteral = @ptrCast(@alignCast(node.ptr));
+                const str_obj = try obj.String.init(self.allocator, str_node.value);
+                return str_obj.object();
+            },
             .Boolean => {
                 const bool_node: *ast.Boolean = @ptrCast(@alignCast(node.ptr));
                 const bool_obj = try obj.Boolean.init(self.allocator, bool_node.value);
                 return bool_obj.object();
             },
-            else => return null,
         }
         return null;
     }
@@ -420,6 +424,32 @@ fn testIntegerObject(object: obj.Object, expected: i64) bool {
         },
         else => return false,
     }
+}
+
+test "eval string expression" {
+    const input = "\"hello world\"";
+
+    const allocator = std.testing.allocator;
+
+    const l = try Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+
+    const env = try Environment.init(allocator);
+    defer env.deinit(allocator);
+
+    const evaluator = try Evaluator.init(allocator);
+    defer evaluator.deinit();
+
+    const evaluated = try evaluator.eval(program.node(), env);
+    const str_obj: *obj.String = @ptrCast(@alignCast(evaluated.?.ptr));
+
+    try testing.expect(std.mem.eql(u8, str_obj.value, "hello world"));
 }
 
 test "eval boolean expression" {

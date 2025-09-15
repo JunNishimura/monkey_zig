@@ -43,6 +43,7 @@ pub const Environment = struct {
 
 const ObjectType = enum {
     integer,
+    string,
     boolean,
     null,
     return_obj,
@@ -172,6 +173,52 @@ pub const Integer = struct {
     }
 
     pub fn setEnv(_: *Integer, _: *Environment) void {}
+};
+
+pub const String = struct {
+    allocator: std.mem.Allocator,
+    type: ObjectType,
+    value: []const u8,
+    is_ident: bool,
+
+    pub fn init(allocator: std.mem.Allocator, value: []const u8) !*String {
+        const str_value = try allocator.dupe(u8, value);
+        const str_obj = try allocator.create(String);
+        str_obj.* = .{
+            .allocator = allocator,
+            .type = ObjectType.string,
+            .value = str_value,
+            .is_ident = false,
+        };
+        return str_obj;
+    }
+
+    pub fn inspect(self: *String, allocator: std.mem.Allocator) ![]const u8 {
+        return std.fmt.allocPrint(allocator, "{s}", .{self.value});
+    }
+
+    pub fn getType(self: *String) ObjectType {
+        return self.type;
+    }
+
+    pub fn deinit(self: *String) void {
+        self.allocator.free(self.value);
+        self.allocator.destroy(self);
+    }
+
+    pub fn object(self: *String) Object {
+        return Object.init(self);
+    }
+
+    pub fn setIsIdent(self: *String, is_ident: bool) void {
+        self.is_ident = is_ident;
+    }
+
+    pub fn isIdent(self: *String) bool {
+        return self.is_ident;
+    }
+
+    pub fn setEnv(_: *String, _: *Environment) void {}
 };
 
 pub const Boolean = struct {
