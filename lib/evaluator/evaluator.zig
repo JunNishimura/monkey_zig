@@ -120,6 +120,7 @@ pub const Evaluator = struct {
                 const bool_obj = try obj.Boolean.init(self.allocator, bool_node.value);
                 return bool_obj.object();
             },
+            else => return null,
         }
         return null;
     }

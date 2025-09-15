@@ -67,6 +67,7 @@ pub const Parser = struct {
         };
         try p.registerPrefix(.Ident, parseIdentifier);
         try p.registerPrefix(.Int, parseIntegerLiteral);
+        try p.registerPrefix(.String, parseStringLiteral);
         try p.registerPrefix(.True, parseBoolean);
         try p.registerPrefix(.False, parseBoolean);
         try p.registerPrefix(.Bang, parsePrefixExpression);
@@ -235,6 +236,10 @@ pub const Parser = struct {
         lit.value = int_value;
 
         return lit.expression();
+    }
+
+    fn parseStringLiteral(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
+        return (try ast.StringLiteral.init(allocator, self.cur_token, self.cur_token.literal)).expression();
     }
 
     fn parseBoolean(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
@@ -637,6 +642,30 @@ fn testIntegerLiteral(allocator: std.mem.Allocator, il: ast.Expression, value: i
     }
 
     return true;
+}
+
+test "test string literal expression" {
+    const input =
+        \\"hello world";
+    ;
+
+    const allocator = std.testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+    checkParserErrors(p);
+
+    try testing.expect(program.statements.items.len == 1);
+    const stmt = program.statements.items[0];
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
+    const str_lit: *ast.StringLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    try testing.expect(std.mem.eql(u8, str_lit.tokenLiteral(), "hello world"));
 }
 
 const TestLiteralValue = union(enum) {

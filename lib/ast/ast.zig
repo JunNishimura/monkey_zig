@@ -11,6 +11,7 @@ const NodeType = enum {
     BlockStatement,
     Identifier,
     IntegerLiteral,
+    StringLiteral,
     Boolean,
     PrefixExpression,
     InfixExpression,
@@ -718,6 +719,44 @@ pub const Boolean = struct {
     }
 
     pub fn expression(self: *Boolean) Expression {
+        return Expression.init(self);
+    }
+};
+
+pub const StringLiteral = struct {
+    allocator: std.mem.Allocator,
+    token: Token,
+    value: []const u8,
+
+    pub fn nodeType(_: *StringLiteral) NodeType {
+        return .StringLiteral;
+    }
+
+    pub fn tokenLiteral(self: *StringLiteral) []const u8 {
+        return self.token.literal;
+    }
+
+    fn expressionNode(_: *StringLiteral) void {}
+
+    pub fn string(self: *StringLiteral) ![]const u8 {
+        return self.token.literal;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token, value: []const u8) !*StringLiteral {
+        const lit = try allocator.create(StringLiteral);
+        lit.* = .{
+            .allocator = allocator,
+            .token = token,
+            .value = value,
+        };
+        return lit;
+    }
+
+    pub fn deinit(self: *StringLiteral) void {
+        self.allocator.destroy(self);
+    }
+
+    pub fn expression(self: *StringLiteral) Expression {
         return Expression.init(self);
     }
 };
