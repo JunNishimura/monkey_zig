@@ -49,6 +49,7 @@ const ObjectType = enum {
     return_obj,
     error_obj,
     function_obj,
+    builtin_obj,
 };
 
 pub const Object = struct {
@@ -464,4 +465,51 @@ pub const Function = struct {
     pub fn setEnv(self: *Function, env: *Environment) void {
         self.extended_env = env;
     }
+};
+
+const ObjectError = error{OutOfMemory};
+pub const BuiltinFn = *const fn (allocator: std.mem.Allocator, args: []Object) ObjectError!?Object;
+
+pub const Builtin = struct {
+    allocator: std.mem.Allocator,
+    type: ObjectType,
+    func: BuiltinFn,
+    is_ident: bool,
+
+    pub fn init(allocator: std.mem.Allocator, func: BuiltinFn) !*Builtin {
+        const builtin = try allocator.create(Builtin);
+        builtin.* = .{
+            .allocator = allocator,
+            .type = ObjectType.builtin_obj,
+            .func = func,
+            .is_ident = false,
+        };
+        return builtin;
+    }
+
+    pub fn inspect(_: *Builtin, _: std.mem.Allocator) ![]const u8 {
+        return "builtin";
+    }
+
+    pub fn getType(self: *Builtin) ObjectType {
+        return self.type;
+    }
+
+    pub fn deinit(self: *Builtin) void {
+        self.allocator.destroy(self);
+    }
+
+    pub fn object(self: *Builtin) Object {
+        return Object.init(self);
+    }
+
+    pub fn setIsIdent(self: *Builtin, is_ident: bool) void {
+        self.is_ident = is_ident;
+    }
+
+    pub fn isIdent(self: *Builtin) bool {
+        return self.is_ident;
+    }
+
+    pub fn setEnv(_: *Builtin, _: *Environment) void {}
 };

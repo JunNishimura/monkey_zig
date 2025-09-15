@@ -13,6 +13,7 @@ pub const Evaluator = struct {
     allocator: std.mem.Allocator,
     result: ?obj.Object,
     evaluated: std.ArrayList(obj.Object),
+    builtins: std.StringHashMap(*obj.Builtin),
 
     pub fn init(allocator: std.mem.Allocator) !*Evaluator {
         const evaluator = try allocator.create(Evaluator);
@@ -20,8 +21,15 @@ pub const Evaluator = struct {
             .allocator = allocator,
             .result = null,
             .evaluated = std.ArrayList(obj.Object).init(allocator),
+            .builtins = std.StringHashMap(*obj.Builtin).init(allocator),
         };
+        try evaluator.initBuiltins();
         return evaluator;
+    }
+
+    fn initBuiltins(self: *Evaluator) EvalError!void {
+        const len_builtin = try obj.Builtin.init(self.allocator, builtinLen);
+        try self.builtins.put("len", len_builtin);
     }
 
     pub fn eval(self: *Evaluator, node: ast.Node, env: *Environment) EvalError!?obj.Object {
@@ -297,6 +305,10 @@ pub const Evaluator = struct {
             val.setIsIdent(true);
             return val;
         }
+        if (self.builtins.get(ident_node.value)) |builtin| {
+            return builtin.object();
+        }
+
         return try self.newError("identifier not found: {s}", .{ident_node.value});
     }
 
@@ -317,7 +329,7 @@ pub const Evaluator = struct {
         return result;
     }
 
-    fn applyFunction(self: *Evaluator, function: obj.Object, args: []obj.Object) !?obj.Object {
+    fn applyFunction(self: *Evaluator, function: obj.Object, args: []obj.Object) EvalError!?obj.Object {
         switch (function.getType()) {
             .function_obj => {
                 const func: *Function = @ptrCast(@alignCast(function.ptr));
@@ -335,6 +347,10 @@ pub const Evaluator = struct {
                 }
 
                 return unwrapReturnValue(evaluated);
+            },
+            .builtin_obj => {
+                const builtin: *obj.Builtin = @ptrCast(@alignCast(function.ptr));
+                return try builtin.func(self.allocator, args);
             },
             else => return try self.newError("not a function: {s}", .{@tagName(function.getType())}),
         }
@@ -372,17 +388,35 @@ pub const Evaluator = struct {
         for (self.evaluated.items) |object| {
             object.deinit();
         }
+
+        var it = self.builtins.valueIterator();
+        while (it.next()) |builtin| {
+            builtin.*.deinit();
+        }
+        self.builtins.deinit();
+
         self.evaluated.deinit();
         self.allocator.destroy(self);
     }
 
     fn addEvaluated(self: *Evaluator, object: obj.Object) EvalError!void {
-        if (object.isIdent()) {
+        if (object.isIdent() or object.getType() == .builtin_obj) {
             return;
         }
         try self.evaluated.append(object);
     }
 };
+
+fn builtinLen(allocator: std.mem.Allocator, args: []obj.Object) EvalError!?obj.Object {
+    if (args.len != 1) {
+        return (try obj.Error.init(allocator, "wrong number of arguments. got={d}, want=1", .{args.len})).object();
+    }
+    if (args[0].getType() != .string) {
+        return (try obj.Error.init(allocator, "argument to `len` not supported, got {s}", .{@tagName(args[0].getType())})).object();
+    }
+    const str_obj: *obj.String = @ptrCast(@alignCast(args[0].ptr));
+    return (try obj.Integer.init(allocator, @intCast(str_obj.value.len))).object();
+}
 
 test "eval integer expression" {
     const tests = [_]struct {
@@ -806,5 +840,57 @@ test "test function application" {
 
         const evaluated = try evaluator.eval(program.node(), env);
         try testing.expect(testIntegerObject(evaluated.?, tt.expected));
+    }
+}
+
+const TestBuiltinFunction = union(enum) {
+    int: i64,
+    str: []const u8,
+};
+
+test "test builtin functions" {
+    const tests = [_]struct {
+        input: []const u8,
+        expected: TestBuiltinFunction,
+    }{
+        .{ .input = "len(\"\")", .expected = .{ .int = 0 } },
+        .{ .input = "len(\"four\")", .expected = .{ .int = 4 } },
+        .{ .input = "len(\"hello world\")", .expected = .{ .int = 11 } },
+        .{ .input = "len(1)", .expected = .{ .str = "argument to `len` not supported, got integer" } },
+        .{ .input = "len(\"one\", \"two\")", .expected = .{ .str = "wrong number of arguments. got=2, want=1" } },
+    };
+
+    for (tests) |tt| {
+        const allocator = std.testing.allocator;
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        const program = try p.parseProgram();
+        defer program.deinit();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluator = try Evaluator.init(allocator);
+        defer evaluator.deinit();
+
+        const evaluated = try evaluator.eval(program.node(), env);
+        switch (tt.expected) {
+            .int => {
+                try testing.expect(testIntegerObject(evaluated.?, tt.expected.int));
+            },
+            .str => {
+                switch (evaluated.?.getType()) {
+                    .error_obj => {
+                        const err_obj: *obj.Error = @ptrCast(@alignCast(evaluated.?.ptr));
+                        try testing.expect(std.mem.eql(u8, err_obj.message, tt.expected.str));
+                    },
+                    else => try testing.expect(false),
+                }
+            },
+        }
     }
 }
