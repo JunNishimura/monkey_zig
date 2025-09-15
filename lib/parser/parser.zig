@@ -75,6 +75,7 @@ pub const Parser = struct {
         try p.registerPrefix(.LParen, parseGroupExpression);
         try p.registerPrefix(.If, parseIfExpression);
         try p.registerPrefix(.Function, parseFunctionLiteral);
+        try p.registerPrefix(.LBracket, parseArrayLiteral);
         try p.registerInfix(.Plus, parseInfixExpression);
         try p.registerInfix(.Minus, parseInfixExpression);
         try p.registerInfix(.Asterisk, parseInfixExpression);
@@ -351,6 +352,52 @@ pub const Parser = struct {
         return func_literal.expression();
     }
 
+    fn parseArrayLiteral(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
+        const array_lit = try ast.ArrayLiteral.init(allocator, self.cur_token);
+
+        if (try self.parseExpressionList(allocator, .RBracket)) |elements| {
+            array_lit.elements = elements;
+        } else {
+            return null;
+        }
+
+        return array_lit.expression();
+    }
+
+    fn parseExpressionList(self: *Parser, allocator: std.mem.Allocator, end: tok.TokenType) !?std.ArrayList(ast.Expression) {
+        var list = std.ArrayList(ast.Expression).init(allocator);
+
+        if (self.peekTokenIs(end)) {
+            self.nextToken();
+            return list;
+        }
+
+        self.nextToken();
+        const exp = try self.parseExpression(allocator, .Lowest);
+        if (exp) |e| {
+            try list.append(e);
+        } else {
+            return null;
+        }
+
+        while (self.peekTokenIs(.Comma)) {
+            self.nextToken();
+            self.nextToken();
+            const other_exp = try self.parseExpression(allocator, .Lowest);
+            if (other_exp) |e| {
+                try list.append(e);
+            } else {
+                return null;
+            }
+        }
+
+        if (!(try self.expectPeek(allocator, end))) {
+            return null;
+        }
+
+        return list;
+    }
+
     fn parseInfixExpression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !?ast.Expression {
         const infix_exp = try ast.InfixExpression.init(
             allocator,
@@ -366,43 +413,9 @@ pub const Parser = struct {
         return infix_exp.expression();
     }
 
-    fn parseCallArguments(self: *Parser, allocator: std.mem.Allocator) !?std.ArrayList(ast.Expression) {
-        var args = std.ArrayList(ast.Expression).init(allocator);
-
-        if (self.peekTokenIs(.RParen)) {
-            self.nextToken();
-            return args;
-        }
-
-        self.nextToken();
-        const arg = try self.parseExpression(allocator, .Lowest);
-        if (arg) |a| {
-            try args.append(a);
-        } else {
-            return null;
-        }
-
-        while (self.peekTokenIs(.Comma)) {
-            self.nextToken();
-            self.nextToken();
-            const other_arg = try self.parseExpression(allocator, .Lowest);
-            if (other_arg) |a| {
-                try args.append(a);
-            } else {
-                return null;
-            }
-        }
-
-        if (!(try self.expectPeek(allocator, .RParen))) {
-            return null;
-        }
-
-        return args;
-    }
-
     fn parseCallExpression(self: *Parser, allocator: std.mem.Allocator, function: ast.Expression) !?ast.Expression {
         const exp = try ast.CallExpression.init(allocator, self.cur_token, function);
-        if (try self.parseCallArguments(allocator)) |args| {
+        if (try self.parseExpressionList(allocator, .RParen)) |args| {
             exp.arguments = args;
         } else {
             return null;
@@ -1048,4 +1061,31 @@ test "test call expression parsing" {
     try testing.expect(try testLiteralExpression(allocator, call_exp.arguments.items[0], .{ .integer = 1 }));
     try testing.expect(try testInfixExpression(allocator, call_exp.arguments.items[1], .{ .integer = 2 }, "*", .{ .integer = 3 }));
     try testing.expect(try testInfixExpression(allocator, call_exp.arguments.items[2], .{ .integer = 4 }, "+", .{ .integer = 5 }));
+}
+
+test "test array literals parsing" {
+    const input = "[1, 2 * 2, 3 + 3]";
+
+    const allocator = testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+    checkParserErrors(p);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+    const array_literal: *ast.ArrayLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    try testing.expect(array_literal.elements.items.len == 3);
+
+    try testing.expect(try testLiteralExpression(allocator, array_literal.elements.items[0], .{ .integer = 1 }));
+    try testing.expect(try testInfixExpression(allocator, array_literal.elements.items[1], .{ .integer = 2 }, "*", .{ .integer = 2 }));
+    try testing.expect(try testInfixExpression(allocator, array_literal.elements.items[2], .{ .integer = 3 }, "+", .{ .integer = 3 }));
 }

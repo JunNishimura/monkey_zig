@@ -18,6 +18,7 @@ const NodeType = enum {
     IfExpression,
     FunctionLiteral,
     CallExpression,
+    ArrayLiteral,
 };
 
 pub const Node = struct {
@@ -875,6 +876,60 @@ pub const CallExpression = struct {
     }
 
     pub fn expression(self: *CallExpression) Expression {
+        return Expression.init(self);
+    }
+};
+
+pub const ArrayLiteral = struct {
+    allocator: std.mem.Allocator,
+    token: Token,
+    elements: std.ArrayList(Expression),
+    str_list: std.ArrayList(u8),
+
+    fn expressionNode(_: *ArrayLiteral) void {}
+
+    pub fn nodeType(_: *ArrayLiteral) NodeType {
+        return .ArrayLiteral;
+    }
+
+    fn tokenLiteral(self: *ArrayLiteral) []const u8 {
+        return self.token.literal;
+    }
+
+    fn string(self: *ArrayLiteral) ![]const u8 {
+        try self.str_list.appendSlice("[");
+        for (self.elements.items, 0..) |elem, index| {
+            if (index > 0) {
+                try self.str_list.appendSlice(", ");
+            }
+            try self.str_list.appendSlice(try elem.string());
+        }
+        try self.str_list.appendSlice("]");
+
+        return self.str_list.items;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token) !*ArrayLiteral {
+        const array_lit = try allocator.create(ArrayLiteral);
+        array_lit.* = .{
+            .allocator = allocator,
+            .token = token,
+            .elements = std.ArrayList(Expression).init(allocator),
+            .str_list = std.ArrayList(u8).init(allocator),
+        };
+        return array_lit;
+    }
+
+    fn deinit(self: *ArrayLiteral) void {
+        self.str_list.deinit();
+        for (self.elements.items) |elem| {
+            elem.deinit();
+        }
+        self.elements.deinit();
+        self.allocator.destroy(self);
+    }
+
+    pub fn expression(self: *ArrayLiteral) Expression {
         return Expression.init(self);
     }
 };
