@@ -84,7 +84,6 @@ pub const Evaluator = struct {
 
                 const args_items = args.items;
                 if (args_items.len == 1 and args_items[0].isError()) {
-                    std.log.warn("args[0]: {any}\n", .{args_items[0]});
                     return args_items[0];
                 }
 
@@ -133,7 +132,17 @@ pub const Evaluator = struct {
                 const bool_obj = try obj.Boolean.init(self.allocator, bool_node.value);
                 return bool_obj.object();
             },
-            else => return null,
+            .ArrayLiteral => {
+                const array_node: *ast.ArrayLiteral = @ptrCast(@alignCast(node.ptr));
+                const elements = try self.evalExpressions(self.allocator, array_node.elements.items, env);
+                defer elements.deinit();
+
+                if (elements.items.len == 1 and elements.items[0].isError()) {
+                    return elements.items[0];
+                }
+
+                return (try obj.Array.init(self.allocator, elements.items)).object();
+            },
         }
         return null;
     }
@@ -893,5 +902,38 @@ test "test builtin functions" {
                 }
             },
         }
+    }
+}
+
+test "test array literals" {
+    const input = "[1, 2 * 2, 3 + 3]";
+
+    const allocator = std.testing.allocator;
+
+    const l = try Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+
+    const env = try Environment.init(allocator);
+    defer env.deinit(allocator);
+
+    const evaluator = try Evaluator.init(allocator);
+    defer evaluator.deinit();
+
+    const evaluated = try evaluator.eval(program.node(), env);
+    switch (evaluated.?.getType()) {
+        .array_obj => {
+            const array_obj: *obj.Array = @ptrCast(@alignCast(evaluated.?.ptr));
+            try testing.expect(array_obj.elements.len == 3);
+            try testing.expect(testIntegerObject(array_obj.elements[0], 1));
+            try testing.expect(testIntegerObject(array_obj.elements[1], 4));
+            try testing.expect(testIntegerObject(array_obj.elements[2], 6));
+        },
+        else => try testing.expect(false),
     }
 }

@@ -50,6 +50,7 @@ const ObjectType = enum {
     error_obj,
     function_obj,
     builtin_obj,
+    array_obj,
 };
 
 pub const Object = struct {
@@ -406,7 +407,6 @@ pub const Function = struct {
     body: *ast.BlockStatement,
     env: *Environment,
     extended_env: ?*Environment,
-    str_list: std.ArrayList(u8),
     is_ident: bool,
 
     pub fn init(allocator: std.mem.Allocator, parameters: []*ast.Identifier, body: *ast.BlockStatement, env: *Environment) !*Function {
@@ -418,7 +418,6 @@ pub const Function = struct {
             .body = body,
             .env = env,
             .extended_env = null,
-            .str_list = std.ArrayList(u8).init(allocator),
             .is_ident = false,
         };
         return func;
@@ -432,22 +431,19 @@ pub const Function = struct {
         if (self.extended_env) |ext_env| {
             ext_env.deinit(self.allocator);
         }
-        self.str_list.deinit();
         self.allocator.destroy(self);
     }
 
-    pub fn inspect(self: *Function, _: std.mem.Allocator) ![]const u8 {
-        try self.str_list.appendSlice("fn(");
+    pub fn inspect(self: *Function, allocator: std.mem.Allocator) ![]const u8 {
+        var result = try std.fmt.allocPrint(allocator, "fn(", .{});
         for (self.parameters, 0..) |param, i| {
             if (i > 0) {
-                try self.str_list.appendSlice(", ");
+                result = try std.fmt.allocPrint(allocator, "{s}, ", .{result});
             }
-            try self.str_list.appendSlice(param.value);
+            result = try std.fmt.allocPrint(allocator, "{s}{s}", .{ result, param.value });
         }
-        try self.str_list.appendSlice(") {\n");
-        try self.str_list.appendSlice(try self.body.string());
-        try self.str_list.appendSlice("\n}");
-        return self.str_list.items;
+        result = try std.fmt.allocPrint(allocator, "{s}) {{\n{s}\n}}", .{ result, try self.body.string() });
+        return result;
     }
 
     pub fn object(self: *Function) Object {
@@ -512,4 +508,61 @@ pub const Builtin = struct {
     }
 
     pub fn setEnv(_: *Builtin, _: *Environment) void {}
+};
+
+pub const Array = struct {
+    allocator: std.mem.Allocator,
+    type: ObjectType,
+    elements: []Object,
+    is_ident: bool,
+
+    pub fn init(allocator: std.mem.Allocator, elements: []Object) !*Array {
+        const arr_elements = try allocator.alloc(Object, elements.len);
+        for (elements, 0..) |elem, i| {
+            arr_elements[i] = elem;
+        }
+        const array_obj = try allocator.create(Array);
+        array_obj.* = .{
+            .allocator = allocator,
+            .type = ObjectType.array_obj,
+            .elements = arr_elements,
+            .is_ident = false,
+        };
+        return array_obj;
+    }
+
+    pub fn inspect(self: *Array, allocator: std.mem.Allocator) ![]const u8 {
+        var result = try std.fmt.allocPrint(allocator, "[", .{});
+        for (self.elements, 0..) |elem, i| {
+            if (i > 0) {
+                result = try std.fmt.allocPrint(allocator, "{s}, ", .{result});
+            }
+            result = try std.fmt.allocPrint(allocator, "{s}{s}", .{ result, try elem.inspect(allocator) });
+        }
+        result = try std.fmt.allocPrint(allocator, "{s}]", .{result});
+        return result;
+    }
+
+    pub fn getType(self: *Array) ObjectType {
+        return self.type;
+    }
+
+    pub fn deinit(self: *Array) void {
+        self.allocator.free(self.elements);
+        self.allocator.destroy(self);
+    }
+
+    pub fn object(self: *Array) Object {
+        return Object.init(self);
+    }
+
+    pub fn setIsIdent(self: *Array, is_ident: bool) void {
+        self.is_ident = is_ident;
+    }
+
+    pub fn isIdent(self: *Array) bool {
+        return self.is_ident;
+    }
+
+    pub fn setEnv(_: *Array, _: *Environment) void {}
 };
