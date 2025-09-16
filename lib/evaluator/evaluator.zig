@@ -30,6 +30,14 @@ pub const Evaluator = struct {
     fn initBuiltins(self: *Evaluator) EvalError!void {
         const len_builtin = try obj.Builtin.init(self.allocator, builtinLen);
         try self.builtins.put("len", len_builtin);
+        const first_builtin = try obj.Builtin.init(self.allocator, builtinFirst);
+        try self.builtins.put("first", first_builtin);
+        const last_builtin = try obj.Builtin.init(self.allocator, builtinLast);
+        try self.builtins.put("last", last_builtin);
+        const rest_builtin = try obj.Builtin.init(self.allocator, builtinRest);
+        try self.builtins.put("rest", rest_builtin);
+        const push_builtin = try obj.Builtin.init(self.allocator, builtinPush);
+        try self.builtins.put("push", push_builtin);
     }
 
     pub fn eval(self: *Evaluator, node: ast.Node, env: *Environment) EvalError!?obj.Object {
@@ -476,11 +484,124 @@ fn builtinLen(allocator: std.mem.Allocator, args: []obj.Object) EvalError!?obj.O
     if (args.len != 1) {
         return (try obj.Error.init(allocator, "wrong number of arguments. got={d}, want=1", .{args.len})).object();
     }
-    if (args[0].getType() != .string) {
-        return (try obj.Error.init(allocator, "argument to `len` not supported, got {s}", .{@tagName(args[0].getType())})).object();
+
+    switch (args[0].getType()) {
+        .string => {
+            const str_obj: *obj.String = @ptrCast(@alignCast(args[0].ptr));
+            return (try obj.Integer.init(allocator, @intCast(str_obj.value.len))).object();
+        },
+        .array_obj => {
+            const array_obj: *obj.Array = @ptrCast(@alignCast(args[0].ptr));
+            return (try obj.Integer.init(allocator, @intCast(array_obj.elements.len))).object();
+        },
+        else => {
+            return (try obj.Error.init(allocator, "argument to `len` not supported, got {s}", .{@tagName(args[0].getType())})).object();
+        },
     }
-    const str_obj: *obj.String = @ptrCast(@alignCast(args[0].ptr));
-    return (try obj.Integer.init(allocator, @intCast(str_obj.value.len))).object();
+}
+
+fn builtinFirst(allocator: std.mem.Allocator, args: []obj.Object) EvalError!?obj.Object {
+    if (args.len != 1) {
+        return (try obj.Error.init(allocator, "wrong number of arguments. got={d}, want=1", .{args.len})).object();
+    }
+
+    if (args[0].getType() != .array_obj) {
+        return (try obj.Error.init(allocator, "argument to `first` must be ARRAY, got {s}", .{@tagName(args[0].getType())})).object();
+    }
+
+    const array: *obj.Array = @ptrCast(@alignCast(args[0].ptr));
+    if (array.elements.len > 0) {
+        const first = array.elements[0];
+        switch (first.getType()) {
+            .integer => {
+                const int_obj: *obj.Integer = @ptrCast(@alignCast(first.ptr));
+                return (try obj.Integer.init(allocator, int_obj.value)).object();
+            },
+            .string => {
+                const str_obj: *obj.String = @ptrCast(@alignCast(first.ptr));
+                return (try obj.String.init(allocator, str_obj.value)).object();
+            },
+            .boolean => {
+                const bool_obj: *obj.Boolean = @ptrCast(@alignCast(first.ptr));
+                return (try obj.Boolean.init(allocator, bool_obj.value)).object();
+            },
+            .null => {
+                return (try obj.Null.init(allocator)).object();
+            },
+            else => return (try obj.Error.init(allocator, "unknown element type: {s}", .{@tagName(first.getType())})).object(),
+        }
+    }
+
+    return (try obj.Null.init(allocator)).object();
+}
+
+fn builtinLast(allocator: std.mem.Allocator, args: []obj.Object) EvalError!?obj.Object {
+    if (args.len != 1) {
+        return (try obj.Error.init(allocator, "wrong number of arguments. got={d}, want=1", .{args.len})).object();
+    }
+
+    if (args[0].getType() != .array_obj) {
+        return (try obj.Error.init(allocator, "argument to `last` must be ARRAY, got {s}", .{@tagName(args[0].getType())})).object();
+    }
+
+    const array: *obj.Array = @ptrCast(@alignCast(args[0].ptr));
+    if (array.elements.len > 0) {
+        const last = array.elements[array.elements.len - 1];
+        switch (last.getType()) {
+            .integer => {
+                const int_obj: *obj.Integer = @ptrCast(@alignCast(last.ptr));
+                return (try obj.Integer.init(allocator, int_obj.value)).object();
+            },
+            .string => {
+                const str_obj: *obj.String = @ptrCast(@alignCast(last.ptr));
+                return (try obj.String.init(allocator, str_obj.value)).object();
+            },
+            .boolean => {
+                const bool_obj: *obj.Boolean = @ptrCast(@alignCast(last.ptr));
+                return (try obj.Boolean.init(allocator, bool_obj.value)).object();
+            },
+            .null => {
+                return (try obj.Null.init(allocator)).object();
+            },
+            else => return (try obj.Error.init(allocator, "unknown element type: {s}", .{@tagName(last.getType())})).object(),
+        }
+    }
+
+    return (try obj.Null.init(allocator)).object();
+}
+
+fn builtinRest(allocator: std.mem.Allocator, args: []obj.Object) EvalError!?obj.Object {
+    if (args.len != 1) {
+        return (try obj.Error.init(allocator, "wrong number of arguments. got={d}, want=1", .{args.len})).object();
+    }
+
+    if (args[0].getType() != .array_obj) {
+        return (try obj.Error.init(allocator, "argument to `rest` must be ARRAY, got {s}", .{@tagName(args[0].getType())})).object();
+    }
+
+    const array: *obj.Array = @ptrCast(@alignCast(args[0].ptr));
+    if (array.elements.len > 0) {
+        const new_elements = array.elements[1..];
+        return (try obj.Array.init(allocator, new_elements)).object();
+    }
+
+    return (try obj.Null.init(allocator)).object();
+}
+
+fn builtinPush(allocator: std.mem.Allocator, args: []obj.Object) EvalError!?obj.Object {
+    if (args.len != 2) {
+        return (try obj.Error.init(allocator, "wrong number of arguments. got={d}, want=2", .{args.len})).object();
+    }
+
+    if (args[0].getType() != .array_obj) {
+        return (try obj.Error.init(allocator, "argument to `push` must be ARRAY, got {s}", .{@tagName(args[0].getType())})).object();
+    }
+
+    const array: *obj.Array = @ptrCast(@alignCast(args[0].ptr));
+    const new_elements = try std.mem.concat(allocator, obj.Object, &[_][]const obj.Object{ array.elements, args[1..] });
+    defer allocator.free(new_elements);
+
+    return (try obj.Array.init(allocator, new_elements)).object();
 }
 
 test "eval integer expression" {
