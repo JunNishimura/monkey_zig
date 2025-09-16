@@ -15,6 +15,7 @@ const Precedence = enum {
     Product,
     Prefix,
     Call,
+    Index,
 
     fn rank(self: Precedence) u8 {
         switch (self) {
@@ -25,6 +26,7 @@ const Precedence = enum {
             .Product => return 5,
             .Prefix => return 6,
             .Call => return 7,
+            .Index => return 8,
         }
     }
 
@@ -43,6 +45,7 @@ const Precedences = std.StaticStringMap(Precedence).initComptime(.{
     .{ tok.TokenType.Asterisk.string(), Precedence.Product },
     .{ tok.TokenType.Slash.string(), Precedence.Product },
     .{ tok.TokenType.LParen.string(), Precedence.Call },
+    .{ tok.TokenType.LBracket.string(), Precedence.Index },
 });
 
 pub const Parser = struct {
@@ -85,6 +88,7 @@ pub const Parser = struct {
         try p.registerInfix(.LessThan, parseInfixExpression);
         try p.registerInfix(.GreaterThan, parseInfixExpression);
         try p.registerInfix(.LParen, parseCallExpression);
+        try p.registerInfix(.LBracket, parseIndexExpression);
 
         p.nextToken();
         p.nextToken();
@@ -421,6 +425,20 @@ pub const Parser = struct {
             return null;
         }
         return exp.expression();
+    }
+
+    fn parseIndexExpression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !?ast.Expression {
+        const index_exp = try ast.IndexExpression.init(allocator, self.cur_token, left);
+
+        self.nextToken();
+
+        index_exp.index = try self.parseExpression(allocator, .Lowest);
+
+        if (!(try self.expectPeek(allocator, .RBracket))) {
+            return null;
+        }
+
+        return index_exp.expression();
     }
 
     fn parseStatement(self: *Parser, allocator: std.mem.Allocator) !?ast.Statement {
@@ -795,6 +813,8 @@ test "test operator precedence parsing" {
         .{ .input = "a + add(b * c) + d", .expected = "((a + add((b * c))) + d)" },
         .{ .input = "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))", .expected = "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))" },
         .{ .input = "add(a + b + c * d / f + g)", .expected = "add((((a + b) + ((c * d) / f)) + g))" },
+        .{ .input = "a * [1, 2, 3, 4][b * c] * d", .expected = "((a * ([1, 2, 3, 4][(b * c)])) * d)" },
+        .{ .input = "add(a * b[2], b[1], 2 * [1, 2][1])", .expected = "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))" },
     };
 
     for (precedence_tests) |precedence_test| {
@@ -1088,4 +1108,28 @@ test "test array literals parsing" {
     try testing.expect(try testLiteralExpression(allocator, array_literal.elements.items[0], .{ .integer = 1 }));
     try testing.expect(try testInfixExpression(allocator, array_literal.elements.items[1], .{ .integer = 2 }, "*", .{ .integer = 2 }));
     try testing.expect(try testInfixExpression(allocator, array_literal.elements.items[2], .{ .integer = 3 }, "+", .{ .integer = 3 }));
+}
+
+test "test parsing index expression" {
+    const input = "myArray[1 + 1]";
+
+    const allocator = testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+    checkParserErrors(p);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+    const index_exp: *ast.IndexExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    try testing.expect(testIdentifier(index_exp.left, "myArray"));
+    try testing.expect(try testInfixExpression(allocator, index_exp.index.?, .{ .integer = 1 }, "+", .{ .integer = 1 }));
 }

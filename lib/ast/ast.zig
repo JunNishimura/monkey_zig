@@ -934,6 +934,59 @@ pub const ArrayLiteral = struct {
     }
 };
 
+pub const IndexExpression = struct {
+    allocator: std.mem.Allocator,
+    token: Token,
+    left: Expression,
+    index: ?Expression,
+    str_list: std.ArrayList(u8),
+
+    fn expressionNode(_: *IndexExpression) void {}
+
+    pub fn nodeType(_: *IndexExpression) NodeType {
+        return .InfixExpression;
+    }
+
+    fn tokenLiteral(self: *IndexExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    fn string(self: *IndexExpression) ![]const u8 {
+        try self.str_list.appendSlice("(");
+        try self.str_list.appendSlice(try self.left.string());
+        try self.str_list.appendSlice("[");
+        try self.str_list.appendSlice(try self.index.?.string());
+        try self.str_list.appendSlice("])");
+
+        return self.str_list.items;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token, left: Expression) !*IndexExpression {
+        const index_exp = try allocator.create(IndexExpression);
+        index_exp.* = .{
+            .allocator = allocator,
+            .token = token,
+            .left = left,
+            .index = null,
+            .str_list = std.ArrayList(u8).init(allocator),
+        };
+        return index_exp;
+    }
+
+    fn deinit(self: *IndexExpression) void {
+        self.str_list.deinit();
+        self.left.deinit();
+        if (self.index) |idx| {
+            idx.deinit();
+        }
+        self.allocator.destroy(self);
+    }
+
+    pub fn expression(self: *IndexExpression) Expression {
+        return Expression.init(self);
+    }
+};
+
 test "test string" {
     const allocator = testing.allocator;
 
