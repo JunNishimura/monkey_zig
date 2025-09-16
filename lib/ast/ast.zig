@@ -19,6 +19,7 @@ const NodeType = enum {
     FunctionLiteral,
     CallExpression,
     ArrayLiteral,
+    IndexExpression,
 };
 
 pub const Node = struct {
@@ -944,7 +945,7 @@ pub const IndexExpression = struct {
     fn expressionNode(_: *IndexExpression) void {}
 
     pub fn nodeType(_: *IndexExpression) NodeType {
-        return .InfixExpression;
+        return .IndexExpression;
     }
 
     fn tokenLiteral(self: *IndexExpression) []const u8 {

@@ -143,6 +143,24 @@ pub const Evaluator = struct {
 
                 return (try obj.Array.init(self.allocator, elements.items)).object();
             },
+            .IndexExpression => {
+                const index_node: *ast.IndexExpression = @ptrCast(@alignCast(node.ptr));
+                const left = try self.eval(index_node.left.node, env);
+                if (left) |l| {
+                    if (l.isError()) {
+                        return l;
+                    }
+                    try self.addEvaluated(l);
+                    const index = try self.eval(index_node.index.?.node, env);
+                    if (index) |i| {
+                        if (i.isError()) {
+                            return i;
+                        }
+                        try self.addEvaluated(i);
+                        return try self.evalIndexExpression(l, i);
+                    }
+                }
+            },
         }
         return null;
     }
@@ -337,6 +355,43 @@ pub const Evaluator = struct {
         }
 
         return result;
+    }
+
+    fn evalIndexExpression(self: *Evaluator, left: obj.Object, index: obj.Object) EvalError!?obj.Object {
+        if (left.getType() == .array_obj and index.getType() == .integer) {
+            const array: *obj.Array = @ptrCast(@alignCast(left.ptr));
+            const int_index: *obj.Integer = @ptrCast(@alignCast(index.ptr));
+            return try self.evalArrayIndexExpression(array, int_index);
+        }
+        return try self.newError("index operator not supported: {s}", .{@tagName(left.getType())});
+    }
+
+    fn evalArrayIndexExpression(self: *Evaluator, array: *obj.Array, index: *obj.Integer) EvalError!?obj.Object {
+        const max: i64 = @intCast(array.elements.len);
+        if (index.value < 0 or index.value >= max) {
+            return (try obj.Null.init(self.allocator)).object();
+        }
+
+        const elem = array.elements[@intCast(index.value)];
+
+        switch (elem.getType()) {
+            .integer => {
+                const int_obj: *obj.Integer = @ptrCast(@alignCast(elem.ptr));
+                return (try obj.Integer.init(self.allocator, int_obj.value)).object();
+            },
+            .string => {
+                const str_obj: *obj.String = @ptrCast(@alignCast(elem.ptr));
+                return (try obj.String.init(self.allocator, str_obj.value)).object();
+            },
+            .boolean => {
+                const bool_obj: *obj.Boolean = @ptrCast(@alignCast(elem.ptr));
+                return (try obj.Boolean.init(self.allocator, bool_obj.value)).object();
+            },
+            .null => {
+                return (try obj.Null.init(self.allocator)).object();
+            },
+            else => return try self.newError("unknown element type: {s}", .{@tagName(elem.getType())}),
+        }
     }
 
     fn applyFunction(self: *Evaluator, function: obj.Object, args: []obj.Object) EvalError!?obj.Object {
@@ -935,5 +990,48 @@ test "test array literals" {
             try testing.expect(testIntegerObject(array_obj.elements[2], 6));
         },
         else => try testing.expect(false),
+    }
+}
+
+test "test array index expressions" {
+    const tests = [_]struct {
+        input: []const u8,
+        expected: ?i64,
+    }{
+        .{ .input = "[1, 2, 3][0]", .expected = 1 },
+        .{ .input = "[1, 2, 3][1]", .expected = 2 },
+        .{ .input = "[1, 2, 3][2]", .expected = 3 },
+        .{ .input = "let i = 0; [1][i];", .expected = 1 },
+        .{ .input = "[1, 2, 3][1 + 1];", .expected = 3 },
+        .{ .input = "let myArray = [1, 2, 3]; myArray[2];", .expected = 3 },
+        .{ .input = "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];", .expected = 6 },
+        .{ .input = "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]", .expected = 2 },
+        .{ .input = "[1, 2, 3][3]", .expected = null },
+        .{ .input = "[1, 2, 3][-1]", .expected = null },
+    };
+
+    for (tests) |tt| {
+        const allocator = std.testing.allocator;
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        const program = try p.parseProgram();
+        defer program.deinit();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluator = try Evaluator.init(allocator);
+        defer evaluator.deinit();
+
+        const evaluated = try evaluator.eval(program.node(), env);
+        if (tt.expected) |expected| {
+            try testing.expect(testIntegerObject(evaluated.?, expected));
+        } else {
+            try testing.expect(testNullObject(evaluated.?));
+        }
     }
 }
