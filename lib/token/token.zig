@@ -23,6 +23,7 @@ pub const TokenType = enum {
 
     Comma,
     Semicolon,
+    Colon,
 
     LParen,
     RParen,
@@ -58,6 +59,7 @@ pub const TokenType = enum {
             .NotEq => "!=",
             .Comma => ",",
             .Semicolon => ";",
+            .Colon => ":",
             .LParen => "(",
             .RParen => ")",
             .LBrace => "{",

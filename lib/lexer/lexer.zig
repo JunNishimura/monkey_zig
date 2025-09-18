@@ -89,6 +89,9 @@ pub const Lexer = struct {
             ';' => {
                 token = newToken(.Semicolon, ";");
             },
+            ':' => {
+                token = newToken(.Colon, ":");
+            },
             '(' => {
                 token = newToken(.LParen, "(");
             },
@@ -199,6 +202,7 @@ test "test next token" {
         \\"foobar"
         \\"foo bar"
         \\[1, 2];
+        \\{"foo": "bar"}
     ;
 
     const expected = [_]struct {
@@ -285,6 +289,11 @@ test "test next token" {
         .{ .expected_type = .Int, .expected_literal = "2" },
         .{ .expected_type = .RBracket, .expected_literal = "]" },
         .{ .expected_type = .Semicolon, .expected_literal = ";" },
+        .{ .expected_type = .LBrace, .expected_literal = "{" },
+        .{ .expected_type = .String, .expected_literal = "foo" },
+        .{ .expected_type = .Colon, .expected_literal = ":" },
+        .{ .expected_type = .String, .expected_literal = "bar" },
+        .{ .expected_type = .RBrace, .expected_literal = "}" },
         .{ .expected_type = .Eof, .expected_literal = "" },
     };
 
