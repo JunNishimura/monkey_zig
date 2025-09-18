@@ -79,6 +79,7 @@ pub const Parser = struct {
         try p.registerPrefix(.If, parseIfExpression);
         try p.registerPrefix(.Function, parseFunctionLiteral);
         try p.registerPrefix(.LBracket, parseArrayLiteral);
+        try p.registerPrefix(.LBrace, parseHashLiteral);
         try p.registerInfix(.Plus, parseInfixExpression);
         try p.registerInfix(.Minus, parseInfixExpression);
         try p.registerInfix(.Asterisk, parseInfixExpression);
@@ -400,6 +401,40 @@ pub const Parser = struct {
         }
 
         return list;
+    }
+
+    fn parseHashLiteral(self: *Parser, allocator: std.mem.Allocator) !?ast.Expression {
+        const hash_lit = try ast.HashLiteral.init(allocator, self.cur_token);
+
+        while (!self.peekTokenIs(.RBrace)) {
+            self.nextToken();
+            const key = try self.parseExpression(allocator, .Lowest);
+            if (key == null) {
+                return null;
+            }
+
+            if (!(try self.expectPeek(allocator, .Colon))) {
+                return null;
+            }
+
+            self.nextToken();
+            const value = try self.parseExpression(allocator, .Lowest);
+            if (value == null) {
+                return null;
+            }
+
+            try hash_lit.pairs.put(key.?, value.?);
+
+            if (!self.peekTokenIs(.RBrace) and !(try self.expectPeek(allocator, .Comma))) {
+                return null;
+            }
+        }
+
+        if (!(try self.expectPeek(allocator, .RBrace))) {
+            return null;
+        }
+
+        return hash_lit.expression();
     }
 
     fn parseInfixExpression(self: *Parser, allocator: std.mem.Allocator, left: ast.Expression) !?ast.Expression {
@@ -1132,4 +1167,119 @@ test "test parsing index expression" {
     const index_exp: *ast.IndexExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
     try testing.expect(testIdentifier(index_exp.left, "myArray"));
     try testing.expect(try testInfixExpression(allocator, index_exp.index.?, .{ .integer = 1 }, "+", .{ .integer = 1 }));
+}
+
+test "test parsing hash literals string keys" {
+    const input =
+        \\{"one": 1, "two": 2, "three": 3};
+    ;
+
+    const allocator = testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+    checkParserErrors(p);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+    const hash_literal: *ast.HashLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+
+    var expected = std.StringHashMap(i64).init(allocator);
+    defer expected.deinit();
+    try expected.put("one", 1);
+    try expected.put("two", 2);
+    try expected.put("three", 3);
+
+    try testing.expect(hash_literal.pairs.count() == expected.count());
+
+    var it = hash_literal.pairs.iterator();
+    while (it.next()) |pair| {
+        const key_ptr = pair.key_ptr.*.ptr;
+        const key_str: *ast.StringLiteral = @ptrCast(@alignCast(key_ptr));
+        const value_ptr = pair.value_ptr.*.ptr;
+        const value: *ast.IntegerLiteral = @ptrCast(@alignCast(value_ptr));
+
+        const expected_value = expected.get(key_str.value);
+        if (expected_value) |v| {
+            try testing.expect(value.value == v);
+        } else {
+            try testing.expect(false);
+        }
+    }
+}
+
+test "test parsing empty hash literals" {
+    const input = "{}";
+
+    const allocator = testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+    checkParserErrors(p);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+    const hash_literal: *ast.HashLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    try testing.expect(hash_literal.pairs.count() == 0);
+}
+test "test parsing hash literals with expressions" {
+    const input =
+        \\{"one": 0 + 1, "two": 10 - 8, "three": 15 / 5};
+    ;
+
+    const allocator = testing.allocator;
+
+    const l = try lexer.Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+    checkParserErrors(p);
+
+    try testing.expect(program.statements.items.len == 1);
+
+    const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
+
+    const hash_literal: *ast.HashLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+
+    var expected = std.StringHashMap(struct { left: TestLiteralValue, operator: []const u8, right: TestLiteralValue }).init(allocator);
+    defer expected.deinit();
+    try expected.put("one", .{ .left = .{ .integer = 0 }, .operator = "+", .right = .{ .integer = 1 } });
+    try expected.put("two", .{ .left = .{ .integer = 10 }, .operator = "-", .right = .{ .integer = 8 } });
+    try expected.put("three", .{ .left = .{ .integer = 15 }, .operator = "/", .right = .{ .integer = 5 } });
+
+    try testing.expect(hash_literal.pairs.count() == expected.count());
+
+    var it = hash_literal.pairs.iterator();
+    while (it.next()) |pair| {
+        const key_ptr = pair.key_ptr.*.ptr;
+        const key_str: *ast.StringLiteral = @ptrCast(@alignCast(key_ptr));
+        const value_ptr = pair.value_ptr.*;
+
+        const expected_value = expected.get(key_str.value);
+        if (expected_value) |v| {
+            try testing.expect(try testInfixExpression(allocator, value_ptr, v.left, v.operator, v.right));
+        } else {
+            try testing.expect(false);
+        }
+    }
 }

@@ -20,6 +20,7 @@ const NodeType = enum {
     CallExpression,
     ArrayLiteral,
     IndexExpression,
+    HashLiteral,
 };
 
 pub const Node = struct {
@@ -984,6 +985,70 @@ pub const IndexExpression = struct {
     }
 
     pub fn expression(self: *IndexExpression) Expression {
+        return Expression.init(self);
+    }
+};
+
+pub const HashLiteral = struct {
+    allocator: std.mem.Allocator,
+    token: Token,
+    pairs: std.AutoHashMap(Expression, Expression),
+    str_list: std.ArrayList(u8),
+
+    fn expressionNode(_: *HashLiteral) void {}
+
+    pub fn nodeType(_: *HashLiteral) NodeType {
+        return .HashLiteral;
+    }
+
+    fn tokenLiteral(self: *HashLiteral) []const u8 {
+        return self.token.literal;
+    }
+
+    fn string(self: *HashLiteral) ![]const u8 {
+        try self.str_list.appendSlice("{");
+        var it = self.pairs.iterator();
+        var first = true;
+        while (it.next()) |pair| {
+            if (!first) {
+                try self.str_list.appendSlice(", ");
+            } else {
+                first = false;
+            }
+            const key_str = try pair.key_ptr.*.string();
+            const value_str = try pair.value_ptr.*.string();
+            try self.str_list.appendSlice(key_str);
+            try self.str_list.appendSlice(": ");
+            try self.str_list.appendSlice(value_str);
+        }
+        try self.str_list.appendSlice("}");
+
+        return self.str_list.items;
+    }
+
+    pub fn init(allocator: std.mem.Allocator, token: Token) !*HashLiteral {
+        const hash_lit = try allocator.create(HashLiteral);
+        hash_lit.* = .{
+            .allocator = allocator,
+            .token = token,
+            .pairs = std.AutoHashMap(Expression, Expression).init(allocator),
+            .str_list = std.ArrayList(u8).init(allocator),
+        };
+        return hash_lit;
+    }
+
+    fn deinit(self: *HashLiteral) void {
+        self.str_list.deinit();
+        var it = self.pairs.iterator();
+        while (it.next()) |pair| {
+            pair.key_ptr.deinit();
+            pair.value_ptr.deinit();
+        }
+        self.pairs.deinit();
+        self.allocator.destroy(self);
+    }
+
+    pub fn expression(self: *HashLiteral) Expression {
         return Expression.init(self);
     }
 };

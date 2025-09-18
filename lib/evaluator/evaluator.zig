@@ -169,6 +169,7 @@ pub const Evaluator = struct {
                     }
                 }
             },
+            else => return null,
         }
         return null;
     }
