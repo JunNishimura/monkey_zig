@@ -1,6 +1,22 @@
 const std = @import("std");
 const ast = @import("ast");
 
+pub const HashKey = struct {
+    value: u64,
+    type: ObjectType,
+
+    pub fn init(value: u64, obj_type: ObjectType) HashKey {
+        return .{
+            .value = value,
+            .type = obj_type,
+        };
+    }
+
+    pub fn equals(self: HashKey, other: HashKey) bool {
+        return self.value == other.value and self.type == other.type;
+    }
+};
+
 pub const Environment = struct {
     store: std.StringHashMap(Object),
     outer: ?*Environment,
@@ -51,6 +67,7 @@ const ObjectType = enum {
     function_obj,
     builtin_obj,
     array_obj,
+    hash_obj,
 };
 
 pub const Object = struct {
@@ -133,6 +150,38 @@ pub const Object = struct {
     }
 };
 
+pub const Hashable = union(enum) {
+    integer: *Integer,
+    string: *String,
+    boolean: *Boolean,
+
+    pub fn hashKey(self: Hashable) HashKey {
+        return switch (self) {
+            .integer => self.integer.hashKey(),
+            .string => self.string.hashKey(),
+            .boolean => self.boolean.hashKey(),
+        };
+    }
+
+    pub fn init(obj: Object) ?Hashable {
+        return switch (obj.getType()) {
+            .integer => {
+                const int_ptr: *Integer = @ptrCast(@alignCast(obj.ptr));
+                return Hashable{ .integer = int_ptr };
+            },
+            .string => {
+                const str_ptr: *String = @ptrCast(@alignCast(obj.ptr));
+                return Hashable{ .string = str_ptr };
+            },
+            .boolean => {
+                const bool_ptr: *Boolean = @ptrCast(@alignCast(obj.ptr));
+                return Hashable{ .boolean = bool_ptr };
+            },
+            else => null,
+        };
+    }
+};
+
 pub const Integer = struct {
     allocator: std.mem.Allocator,
     type: ObjectType,
@@ -175,6 +224,11 @@ pub const Integer = struct {
     }
 
     pub fn setEnv(_: *Integer, _: *Environment) void {}
+
+    pub fn hashKey(self: *Integer) HashKey {
+        const value: u64 = @intCast(self.value);
+        return HashKey.init(value, self.type);
+    }
 };
 
 pub const String = struct {
@@ -221,6 +275,12 @@ pub const String = struct {
     }
 
     pub fn setEnv(_: *String, _: *Environment) void {}
+
+    pub fn hashKey(self: *String) HashKey {
+        var hasher = std.hash.Fnv1a_64.init();
+        hasher.update(self.value);
+        return HashKey.init(hasher.final(), self.type);
+    }
 };
 
 pub const Boolean = struct {
@@ -265,6 +325,14 @@ pub const Boolean = struct {
     }
 
     pub fn setEnv(_: *Boolean, _: *Environment) void {}
+
+    pub fn hashKey(self: *Boolean) HashKey {
+        var value: u8 = 0;
+        if (self.value) {
+            value = 1;
+        }
+        return HashKey.init(@as(u64, value), self.type);
+    }
 };
 
 pub const Null = struct {
@@ -566,3 +634,92 @@ pub const Array = struct {
 
     pub fn setEnv(_: *Array, _: *Environment) void {}
 };
+
+pub const HashPair = struct {
+    key: Object,
+    value: Object,
+};
+
+pub const Hash = struct {
+    allocator: std.mem.Allocator,
+    pairs: std.AutoHashMap(HashKey, HashPair),
+    type: ObjectType,
+    is_ident: bool,
+
+    pub fn init(allocator: std.mem.Allocator) !*Hash {
+        const hash = try allocator.create(Hash);
+        hash.* = .{
+            .allocator = allocator,
+            .pairs = std.AutoHashMap(HashKey, HashPair).init(allocator),
+            .type = ObjectType.hash_obj,
+            .is_ident = false,
+        };
+        return hash;
+    }
+
+    pub fn inspect(self: *Hash, allocator: std.mem.Allocator) ![]const u8 {
+        var result = std.ArrayList(u8).init(allocator);
+        defer result.deinit();
+
+        try result.append('{');
+        var first = true;
+        var it = self.pairs.iterator();
+        while (it.next()) |pair| {
+            if (!first) {
+                try result.appendSlice(", ");
+            } else {
+                first = false;
+            }
+            const key_str = try pair.value_ptr.*.key.inspect(allocator);
+            const value_str = try pair.value_ptr.*.value.inspect(allocator);
+            try result.appendSlice(key_str);
+            try result.appendSlice(" : ");
+            try result.appendSlice(value_str);
+            allocator.free(key_str);
+            allocator.free(value_str);
+        }
+        try result.append('}');
+
+        return result.toOwnedSlice();
+    }
+
+    pub fn getType(self: *Hash) ObjectType {
+        return self.type;
+    }
+
+    pub fn deinit(self: *Hash) void {
+        self.pairs.deinit();
+        self.allocator.destroy(self);
+    }
+
+    pub fn object(self: *Hash) Object {
+        return Object.init(self);
+    }
+
+    pub fn setIsIdent(self: *Hash, is_ident: bool) void {
+        self.is_ident = is_ident;
+    }
+
+    pub fn isIdent(self: *Hash) bool {
+        return self.is_ident;
+    }
+
+    pub fn setEnv(_: *Hash, _: *Environment) void {}
+};
+
+test "string hash key" {
+    const allocator = std.testing.allocator;
+
+    const str1 = try String.init(allocator, "Hello World");
+    defer str1.deinit();
+    const str2 = try String.init(allocator, "Hello World");
+    defer str2.deinit();
+    const str3 = try String.init(allocator, "My name is John");
+    defer str3.deinit();
+    const str4 = try String.init(allocator, "My name is John");
+    defer str4.deinit();
+
+    try std.testing.expect(str1.hashKey().equals(str2.hashKey()));
+    try std.testing.expect(str3.hashKey().equals(str4.hashKey()));
+    try std.testing.expect(!str1.hashKey().equals(str3.hashKey()));
+}

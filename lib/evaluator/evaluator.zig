@@ -169,7 +169,9 @@ pub const Evaluator = struct {
                     }
                 }
             },
-            else => return null,
+            .HashLiteral => {
+                return try self.evalHashLiteral(node, env);
+            },
         }
         return null;
     }
@@ -401,6 +403,43 @@ pub const Evaluator = struct {
             },
             else => return try self.newError("unknown element type: {s}", .{@tagName(elem.getType())}),
         }
+    }
+
+    fn evalHashLiteral(self: *Evaluator, node: ast.Node, env: *Environment) EvalError!?obj.Object {
+        const hash_node: *ast.HashLiteral = @ptrCast(@alignCast(node.ptr));
+
+        const hash_obj = try obj.Hash.init(self.allocator);
+
+        var it = hash_node.pairs.iterator();
+        while (it.next()) |pair| {
+            const key = try self.eval(pair.key_ptr.*.node, env);
+            if (key.?.isError()) {
+                hash_obj.deinit();
+                return key;
+            }
+            const hashable = obj.Hashable.init(key.?);
+            if (hashable == null) {
+                hash_obj.deinit();
+                return try self.newError("unusable as hash key: {s}", .{@tagName(key.?.getType())});
+            }
+            const hash_key = hashable.?.hashKey();
+
+            const value = try self.eval(pair.value_ptr.*.node, env);
+            if (value.?.isError()) {
+                hash_obj.deinit();
+                return value;
+            }
+            const hash_pair = obj.HashPair{
+                .key = key.?,
+                .value = value.?,
+            };
+            try self.addEvaluated(key.?);
+            try self.addEvaluated(value.?);
+
+            try hash_obj.pairs.put(hash_key, hash_pair);
+        }
+
+        return hash_obj.object();
     }
 
     fn applyFunction(self: *Evaluator, function: obj.Object, args: []obj.Object) EvalError!?obj.Object {
@@ -1155,5 +1194,69 @@ test "test array index expressions" {
         } else {
             try testing.expect(testNullObject(evaluated.?));
         }
+    }
+}
+
+test "test hash literals" {
+    const input =
+        \\let two = "two";
+        \\{
+        \\  "one": 10 - 9,
+        \\  two: 1 + 1,
+        \\  "thr" + "ee": 6 / 2,
+        \\  4: 4,
+        \\  true: 5,
+        \\  false: 6
+        \\};
+    ;
+
+    const allocator = std.testing.allocator;
+
+    const first = try obj.String.init(allocator, "one");
+    defer first.deinit();
+    const second = try obj.String.init(allocator, "two");
+    defer second.deinit();
+    const third = try obj.String.init(allocator, "three");
+    defer third.deinit();
+    const four = try obj.Integer.init(allocator, @as(u64, 4));
+    defer four.deinit();
+    const five = try obj.Boolean.init(allocator, true);
+    defer five.deinit();
+    const six = try obj.Boolean.init(allocator, false);
+    defer six.deinit();
+
+    var expected = std.AutoHashMap(obj.HashKey, i64).init(allocator);
+    defer expected.deinit();
+
+    try expected.put(first.hashKey(), 1);
+    try expected.put(second.hashKey(), 2);
+    try expected.put(third.hashKey(), 3);
+    try expected.put(four.hashKey(), 4);
+    try expected.put(five.hashKey(), 5);
+    try expected.put(six.hashKey(), 6);
+
+    const l = try Lexer.init(allocator, input);
+    defer allocator.destroy(l);
+
+    const p = try Parser.init(allocator, l);
+    defer p.deinit();
+
+    const program = try p.parseProgram();
+    defer program.deinit();
+
+    const env = try Environment.init(allocator);
+    defer env.deinit(allocator);
+
+    const evaluator = try Evaluator.init(allocator);
+    defer evaluator.deinit();
+
+    const evaluated = try evaluator.eval(program.node(), env);
+    const hash: *obj.Hash = @ptrCast(@alignCast(evaluated.?.ptr));
+
+    try testing.expect(hash.pairs.count() == expected.count());
+    var it = hash.pairs.iterator();
+    while (it.next()) |pair| {
+        const expected_value = expected.get(pair.key_ptr.*);
+        try testing.expect(testIntegerObject(pair.value_ptr.*.value, expected_value.?));
     }
 }
