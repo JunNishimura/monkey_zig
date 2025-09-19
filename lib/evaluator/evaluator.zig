@@ -373,6 +373,8 @@ pub const Evaluator = struct {
             const array: *obj.Array = @ptrCast(@alignCast(left.ptr));
             const int_index: *obj.Integer = @ptrCast(@alignCast(index.ptr));
             return try self.evalArrayIndexExpression(array, int_index);
+        } else if (left.getType() == .hash_obj) {
+            return try self.evalHashIndexExpression(left, index);
         }
         return try self.newError("index operator not supported: {s}", .{@tagName(left.getType())});
     }
@@ -401,7 +403,54 @@ pub const Evaluator = struct {
             .null => {
                 return (try obj.Null.init(self.allocator)).object();
             },
+            .hash_obj => {
+                const hash_obj: *obj.Hash = @ptrCast(@alignCast(elem.ptr));
+
+                const new_hash = try obj.Hash.init(self.allocator);
+                var it = hash_obj.pairs.iterator();
+                while (it.next()) |pair| {
+                    const key = pair.key_ptr.*;
+                    const value = pair.value_ptr.*;
+                    try new_hash.pairs.put(key, value);
+                }
+                return new_hash.object();
+            },
             else => return try self.newError("unknown element type: {s}", .{@tagName(elem.getType())}),
+        }
+    }
+
+    fn evalHashIndexExpression(self: *Evaluator, hash_obj: obj.Object, index: obj.Object) EvalError!?obj.Object {
+        const hash: *obj.Hash = @ptrCast(@alignCast(hash_obj.ptr));
+
+        const hashable = obj.Hashable.init(index);
+        if (hashable == null) {
+            return try self.newError("unusable as hash key: {s}", .{@tagName(index.getType())});
+        }
+        const hash_key = hashable.?.hashKey();
+
+        const pair = hash.pairs.get(hash_key);
+        if (pair == null) {
+            return (try obj.Null.init(self.allocator)).object();
+        }
+
+        const value = pair.?.value;
+        switch (value.getType()) {
+            .integer => {
+                const int_obj: *obj.Integer = @ptrCast(@alignCast(value.ptr));
+                return (try obj.Integer.init(self.allocator, int_obj.value)).object();
+            },
+            .string => {
+                const str_obj: *obj.String = @ptrCast(@alignCast(value.ptr));
+                return (try obj.String.init(self.allocator, str_obj.value)).object();
+            },
+            .boolean => {
+                const bool_obj: *obj.Boolean = @ptrCast(@alignCast(value.ptr));
+                return (try obj.Boolean.init(self.allocator, bool_obj.value)).object();
+            },
+            .null => {
+                return (try obj.Null.init(self.allocator)).object();
+            },
+            else => return try self.newError("unknown value type: {s}", .{@tagName(value.getType())}),
         }
     }
 
@@ -938,6 +987,7 @@ test "test error handling" {
         .{ .input = "if (10 > 1) { if (10 > 1) { return true + false; } return 1; }", .expected_message = "unknown operator: boolean + boolean" },
         .{ .input = "foobar", .expected_message = "identifier not found: foobar" },
         .{ .input = "\"Hello\" - \"World\"", .expected_message = "unknown operator: string - string" },
+        .{ .input = "{ \"name\": \"Monkey\" }[fn(x) { x }];", .expected_message = "unusable as hash key: function_obj" },
     };
 
     for (tests) |tt| {
@@ -1258,5 +1308,45 @@ test "test hash literals" {
     while (it.next()) |pair| {
         const expected_value = expected.get(pair.key_ptr.*);
         try testing.expect(testIntegerObject(pair.value_ptr.*.value, expected_value.?));
+    }
+}
+
+test "test hash index expressions" {
+    const tests = [_]struct {
+        input: []const u8,
+        expected: ?i64,
+    }{
+        .{ .input = "{\"foo\": 5}[\"foo\"]", .expected = 5 },
+        .{ .input = "{\"foo\": 5}[\"bar\"]", .expected = null },
+        .{ .input = "let key = \"foo\"; {\"foo\": 5}[key]", .expected = 5 },
+        .{ .input = "{}[\"foo\"]", .expected = null },
+        .{ .input = "{5: 5}[5]", .expected = 5 },
+        .{ .input = "{true: 5}[true]", .expected = 5 },
+        .{ .input = "{false: 5}[false]", .expected = 5 },
+    };
+
+    for (tests) |tt| {
+        const allocator = std.testing.allocator;
+        const l = try Lexer.init(allocator, tt.input);
+        defer allocator.destroy(l);
+
+        const p = try Parser.init(allocator, l);
+        defer p.deinit();
+
+        const program = try p.parseProgram();
+        defer program.deinit();
+
+        const env = try Environment.init(allocator);
+        defer env.deinit(allocator);
+
+        const evaluator = try Evaluator.init(allocator);
+        defer evaluator.deinit();
+
+        const evaluated = try evaluator.eval(program.node(), env);
+        if (tt.expected) |expected| {
+            try testing.expect(testIntegerObject(evaluated.?, expected));
+        } else {
+            try testing.expect(testNullObject(evaluated.?));
+        }
     }
 }
