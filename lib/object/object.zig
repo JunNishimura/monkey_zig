@@ -1,22 +1,6 @@
 const std = @import("std");
 const ast = @import("ast");
 
-pub const HashKey = struct {
-    value: u64,
-    type: ObjectType,
-
-    pub fn init(value: u64, obj_type: ObjectType) HashKey {
-        return .{
-            .value = value,
-            .type = obj_type,
-        };
-    }
-
-    pub fn equals(self: HashKey, other: HashKey) bool {
-        return self.value == other.value and self.type == other.type;
-    }
-};
-
 pub const Environment = struct {
     allocator: std.mem.Allocator,
     store: std.StringHashMap(Object),
@@ -617,6 +601,22 @@ pub const Array = struct {
     }
 
     pub fn setEnv(_: *Array, _: *Environment) void {}
+};
+
+pub const HashKey = struct {
+    value: u64,
+    type: ObjectType,
+
+    pub fn init(value: u64, obj_type: ObjectType) HashKey {
+        return .{
+            .value = value,
+            .type = obj_type,
+        };
+    }
+
+    pub fn equals(self: HashKey, other: HashKey) bool {
+        return self.value == other.value and self.type == other.type;
+    }
 };
 
 pub const HashPair = struct {
