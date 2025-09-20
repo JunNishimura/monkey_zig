@@ -626,7 +626,7 @@ pub const Identifier = struct {
 pub const IntegerLiteral = struct {
     allocator: std.mem.Allocator,
     token: Token,
-    value: ?i64,
+    value: i64,
 
     pub fn nodeType(_: *IntegerLiteral) NodeType {
         return .IntegerLiteral;
@@ -646,12 +646,12 @@ pub const IntegerLiteral = struct {
         return self.token.literal;
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token) !*IntegerLiteral {
+    pub fn init(allocator: std.mem.Allocator, token: Token, value: i64) !*IntegerLiteral {
         const lit = try allocator.create(IntegerLiteral);
         lit.* = .{
             .allocator = allocator,
             .token = token,
-            .value = null,
+            .value = value,
         };
         return lit;
     }

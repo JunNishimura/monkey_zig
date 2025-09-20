@@ -233,12 +233,11 @@ pub const Parser = struct {
     }
 
     fn parseIntegerLiteral(self: *Parser) !?ast.Expression {
-        const lit = try ast.IntegerLiteral.init(self.allocator, self.cur_token);
+        const cur_token = self.cur_token;
 
         const int_value = try std.fmt.parseInt(i64, self.cur_token.literal, 10);
-        lit.value = int_value;
 
-        return lit.expression();
+        return (try ast.IntegerLiteral.init(self.allocator, cur_token, int_value)).expression();
     }
 
     fn parseStringLiteral(self: *Parser) !?ast.Expression {

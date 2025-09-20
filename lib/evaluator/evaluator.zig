@@ -127,7 +127,7 @@ pub const Evaluator = struct {
             },
             .IntegerLiteral => {
                 const int_node: *ast.IntegerLiteral = @ptrCast(@alignCast(node.ptr));
-                const int_obj = try obj.Integer.init(self.allocator, int_node.value orelse 0);
+                const int_obj = try obj.Integer.init(self.allocator, int_node.value);
                 return int_obj.object();
             },
             .StringLiteral => {
