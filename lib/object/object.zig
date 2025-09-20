@@ -475,15 +475,20 @@ pub const Function = struct {
     }
 
     pub fn inspect(self: *Function, allocator: std.mem.Allocator) ![]const u8 {
-        var result = try std.fmt.allocPrint(allocator, "fn(", .{});
+        var result = std.ArrayList(u8).init(allocator);
+        defer result.deinit();
+
+        try result.appendSlice("fn(");
         for (self.parameters, 0..) |param, i| {
             if (i > 0) {
-                result = try std.fmt.allocPrint(allocator, "{s}, ", .{result});
+                try result.appendSlice(", ");
             }
-            result = try std.fmt.allocPrint(allocator, "{s}{s}", .{ result, param.value });
+            try result.appendSlice(param.value);
         }
-        result = try std.fmt.allocPrint(allocator, "{s}) {{\n{s}\n}}", .{ result, try self.body.string() });
-        return result;
+        try result.appendSlice(") {{\n");
+        try result.appendSlice(try self.body.string());
+        try result.appendSlice("\n}}");
+        return result.toOwnedSlice();
     }
 
     pub fn object(self: *Function) Object {
@@ -568,15 +573,17 @@ pub const Array = struct {
     }
 
     pub fn inspect(self: *Array, allocator: std.mem.Allocator) ![]const u8 {
-        var result = try std.fmt.allocPrint(allocator, "[", .{});
+        var result = std.ArrayList(u8).init(allocator);
+        defer result.deinit();
+        try result.appendSlice("[");
         for (self.elements, 0..) |elem, i| {
             if (i > 0) {
-                result = try std.fmt.allocPrint(allocator, "{s}, ", .{result});
+                try result.appendSlice(", ");
             }
-            result = try std.fmt.allocPrint(allocator, "{s}{s}", .{ result, try elem.inspect(allocator) });
+            try result.appendSlice(try elem.inspect(allocator));
         }
-        result = try std.fmt.allocPrint(allocator, "{s}]", .{result});
-        return result;
+        try result.appendSlice("]");
+        return result.toOwnedSlice();
     }
 
     pub fn getType(_: *Array) ObjectType {
