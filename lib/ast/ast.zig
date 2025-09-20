@@ -276,7 +276,7 @@ pub const LetStatement = struct {
 pub const ReturnStatement = struct {
     allocator: std.mem.Allocator,
     token: Token,
-    return_value: ?Expression,
+    return_value: Expression,
     str_list: std.ArrayList(u8),
 
     pub fn nodeType(_: *ReturnStatement) NodeType {
@@ -292,12 +292,7 @@ pub const ReturnStatement = struct {
     fn string(self: *ReturnStatement) ![]const u8 {
         try self.str_list.appendSlice(self.tokenLiteral());
         try self.str_list.appendSlice(" ");
-        if (self.return_value) |rv| {
-            const return_value_str = try rv.string();
-            try self.str_list.appendSlice(return_value_str);
-        } else {
-            try self.str_list.appendSlice("<no return value>");
-        }
+        try self.str_list.appendSlice(try self.return_value.string());
         try self.str_list.appendSlice(";");
         return self.str_list.items;
     }
@@ -306,12 +301,12 @@ pub const ReturnStatement = struct {
         return Statement.init(self);
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token) !*ReturnStatement {
+    pub fn init(allocator: std.mem.Allocator, token: Token, return_value: Expression) !*ReturnStatement {
         const stmt = try allocator.create(ReturnStatement);
         stmt.* = .{
             .allocator = allocator,
             .token = token,
-            .return_value = null,
+            .return_value = return_value,
             .str_list = std.ArrayList(u8).init(allocator),
         };
         return stmt;
@@ -319,9 +314,7 @@ pub const ReturnStatement = struct {
 
     pub fn deinit(self: *ReturnStatement) void {
         self.str_list.deinit();
-        if (self.return_value) |rv| {
-            rv.deinit();
-        }
+        self.return_value.deinit();
         self.allocator.destroy(self);
     }
 };

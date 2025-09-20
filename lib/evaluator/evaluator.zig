@@ -58,7 +58,7 @@ pub const Evaluator = struct {
             .ReturnStatement => {
                 const return_node: *ast.ReturnStatement = @ptrCast(@alignCast(node.ptr));
 
-                const return_value = try self.eval(return_node.return_value.?.node, env);
+                const return_value = try self.eval(return_node.return_value.node, env);
                 if (return_value.?.isError()) {
                     return return_value;
                 }

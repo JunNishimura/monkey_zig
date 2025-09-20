@@ -168,17 +168,17 @@ pub const Parser = struct {
     }
 
     fn parseReturnStatement(self: *Parser) !*ast.ReturnStatement {
-        const return_stmt = try ast.ReturnStatement.init(self.allocator, self.cur_token);
+        const return_cur_token = self.cur_token;
 
         self.nextToken();
 
-        return_stmt.return_value = try self.parseExpression(.Lowest);
+        const return_value = try self.parseExpression(.Lowest);
 
         if (self.peekTokenIs(.Semicolon)) {
             self.nextToken();
         }
 
-        return return_stmt;
+        return try ast.ReturnStatement.init(self.allocator, return_cur_token, return_value.?);
     }
 
     fn parseBlockStatement(self: *Parser) !*ast.BlockStatement {
@@ -478,19 +478,16 @@ pub const Parser = struct {
     fn parseStatement(self: *Parser) !?ast.Statement {
         switch (self.cur_token.type) {
             .Let => {
-                const let_stmt = try self.parseLetStatement();
-                if (let_stmt) |ls| {
+                if (try self.parseLetStatement()) |ls| {
                     return ls.statement();
                 }
                 return null;
             },
             .Return => {
-                const return_stmt = try self.parseReturnStatement();
-                return return_stmt.statement();
+                return (try self.parseReturnStatement()).statement();
             },
             else => {
-                const exp_stmt = try self.parseExpressionStatement();
-                return exp_stmt.statement();
+                return (try self.parseExpressionStatement()).statement();
             },
         }
     }
@@ -631,7 +628,7 @@ test "test return statement" {
         const ret_stmt: *ast.ReturnStatement = @ptrCast(@alignCast(stmt.ptr));
 
         try testing.expect(std.mem.eql(u8, ret_stmt.tokenLiteral(), "return"));
-        try testing.expect(try testLiteralExpression(allocator, ret_stmt.return_value.?, return_test.expected_value));
+        try testing.expect(try testLiteralExpression(allocator, ret_stmt.return_value, return_test.expected_value));
     }
 }
 
