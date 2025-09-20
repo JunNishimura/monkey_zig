@@ -225,8 +225,8 @@ pub const Program = struct {
 pub const LetStatement = struct {
     allocator: std.mem.Allocator,
     token: Token,
-    name: ?*Identifier,
-    value: ?Expression,
+    name: *Identifier,
+    value: Expression,
     str_list: std.ArrayList(u8),
 
     pub fn nodeType(_: *LetStatement) NodeType {
@@ -242,19 +242,9 @@ pub const LetStatement = struct {
     fn string(self: *LetStatement) ![]const u8 {
         try self.str_list.appendSlice(self.tokenLiteral());
         try self.str_list.appendSlice(" ");
-        if (self.name) |n| {
-            const name_str = try n.string();
-            try self.str_list.appendSlice(name_str);
-        } else {
-            try self.str_list.appendSlice("<no name>");
-        }
+        try self.str_list.appendSlice(try self.name.string());
         try self.str_list.appendSlice(" = ");
-        if (self.value) |v| {
-            const value_str = try v.string();
-            try self.str_list.appendSlice(value_str);
-        } else {
-            try self.str_list.appendSlice("<no value>");
-        }
+        try self.str_list.appendSlice(try self.value.string());
         try self.str_list.appendSlice(";");
         return self.str_list.items;
     }
@@ -263,25 +253,21 @@ pub const LetStatement = struct {
         return Statement.init(self);
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token) !*LetStatement {
+    pub fn init(allocator: std.mem.Allocator, token: Token, name: *Identifier, value: Expression) !*LetStatement {
         const stmt = try allocator.create(LetStatement);
         stmt.* = .{
             .allocator = allocator,
             .token = token,
-            .name = null,
-            .value = null,
+            .name = name,
+            .value = value,
             .str_list = std.ArrayList(u8).init(allocator),
         };
         return stmt;
     }
 
     pub fn deinit(self: *LetStatement) void {
-        if (self.name) |n| {
-            self.allocator.destroy(n);
-        }
-        if (self.value) |v| {
-            v.deinit();
-        }
+        self.name.deinit();
+        self.value.deinit();
         self.str_list.deinit();
         self.allocator.destroy(self);
     }
@@ -1059,12 +1045,9 @@ test "test string" {
     const program = try Program.init(allocator);
     defer program.deinit();
 
-    const let_stmt = try LetStatement.init(allocator, Token{ .type = .Let, .literal = "let" });
-
     const name = try Identifier.init(allocator, Token{ .type = .Ident, .literal = "myVar" }, "myVar");
-    let_stmt.name = name;
     const value = try Identifier.init(allocator, Token{ .type = .Ident, .literal = "anotherVar" }, "anotherVar");
-    let_stmt.value = value.expression();
+    const let_stmt = try LetStatement.init(allocator, Token{ .type = .Let, .literal = "let" }, name, value.expression());
     try program.statements.append(let_stmt.statement());
 
     const out = try program.string();

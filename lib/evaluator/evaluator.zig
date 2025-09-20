@@ -67,12 +67,12 @@ pub const Evaluator = struct {
             },
             .LetStatement => {
                 const let_node: *ast.LetStatement = @ptrCast(@alignCast(node.ptr));
-                const value = try self.eval(let_node.value.?.node, env);
+                const value = try self.eval(let_node.value.node, env);
                 if (value.?.isError()) {
                     return value;
                 }
                 try self.addEvaluated(value.?);
-                try env.set(let_node.name.?.value, value.?);
+                try env.set(let_node.name.value, value.?);
             },
             .FunctionLiteral => {
                 const func_node: *ast.FunctionLiteral = @ptrCast(@alignCast(node.ptr));
