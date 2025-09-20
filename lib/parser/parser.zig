@@ -187,9 +187,7 @@ pub const Parser = struct {
         self.nextToken();
 
         while (!self.curTokenIs(.RBrace) and !self.curTokenIs(.Eof)) {
-            const stmt = try self.parseStatement();
-
-            if (stmt) |s| {
+            if (try self.parseStatement()) |s| {
                 try block_stmt.statements.append(s);
             }
 
