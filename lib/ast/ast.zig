@@ -322,7 +322,7 @@ pub const ReturnStatement = struct {
 pub const ExpressionStatement = struct {
     allocator: std.mem.Allocator,
     token: Token,
-    expression: ?Expression,
+    expression: Expression,
 
     fn statementNode(_: *ExpressionStatement) void {}
 
@@ -335,30 +335,24 @@ pub const ExpressionStatement = struct {
     }
 
     fn deinit(self: *ExpressionStatement) void {
-        if (self.expression) |e| {
-            e.deinit();
-        }
-
+        self.expression.deinit();
         self.allocator.destroy(self);
     }
 
     fn string(self: *ExpressionStatement) ![]const u8 {
-        if (self.expression) |e| {
-            return e.string();
-        }
-        return "";
+        return self.expression.string();
     }
 
     pub fn statement(self: *ExpressionStatement) Statement {
         return Statement.init(self);
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token) !*ExpressionStatement {
+    pub fn init(allocator: std.mem.Allocator, token: Token, expression: Expression) !*ExpressionStatement {
         const stmt = try allocator.create(ExpressionStatement);
         stmt.* = .{
             .allocator = allocator,
             .token = token,
-            .expression = null,
+            .expression = expression,
         };
         return stmt;
     }

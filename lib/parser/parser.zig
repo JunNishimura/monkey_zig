@@ -221,15 +221,15 @@ pub const Parser = struct {
     }
 
     fn parseExpressionStatement(self: *Parser) !*ast.ExpressionStatement {
-        const exp_stmt = try ast.ExpressionStatement.init(self.allocator, self.cur_token);
+        const cur_token = self.cur_token;
 
-        exp_stmt.expression = try self.parseExpression(.Lowest);
+        const expression = try self.parseExpression(.Lowest);
 
         if (self.peekTokenIs(.Semicolon)) {
             self.nextToken();
         }
 
-        return exp_stmt;
+        return try ast.ExpressionStatement.init(self.allocator, cur_token, expression.?);
     }
 
     fn parseIntegerLiteral(self: *Parser) !?ast.Expression {
@@ -652,7 +652,7 @@ test "test identifier expression" {
     const stmt = program.statements.items[0];
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
-    const ident: *ast.Identifier = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const ident: *ast.Identifier = @ptrCast(@alignCast(exp_stmt.expression.ptr));
     try testing.expect(std.mem.eql(u8, ident.tokenLiteral(), "foobar"));
     try testing.expect(std.mem.eql(u8, ident.value, "foobar"));
 }
@@ -679,7 +679,7 @@ test "test integer literal expression" {
     const stmt = program.statements.items[0];
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
-    const lit: *ast.IntegerLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const lit: *ast.IntegerLiteral = @ptrCast(@alignCast(exp_stmt.expression.ptr));
     try testing.expect(std.mem.eql(u8, lit.tokenLiteral(), "5"));
     try testing.expect(lit.value == 5);
 }
@@ -721,7 +721,7 @@ test "test string literal expression" {
     try testing.expect(program.statements.items.len == 1);
     const stmt = program.statements.items[0];
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
-    const str_lit: *ast.StringLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const str_lit: *ast.StringLiteral = @ptrCast(@alignCast(exp_stmt.expression.ptr));
     try testing.expect(std.mem.eql(u8, str_lit.tokenLiteral(), "hello world"));
 }
 
@@ -761,7 +761,7 @@ test "test parsing prefix expressions" {
         const stmt = program.statements.items[0];
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
-        const prefix_expr: *ast.PrefixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+        const prefix_expr: *ast.PrefixExpression = @ptrCast(@alignCast(exp_stmt.expression.ptr));
         try testing.expect(std.mem.eql(u8, prefix_expr.operator, prefix_test.operator));
         try testing.expect(try testPrefixExpression(allocator, prefix_expr.expression(), prefix_expr.operator, prefix_test.value));
     }
@@ -805,7 +805,7 @@ test "test parsing infix expressions" {
         const stmt = program.statements.items[0];
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
-        const infix_expr: *ast.InfixExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+        const infix_expr: *ast.InfixExpression = @ptrCast(@alignCast(exp_stmt.expression.ptr));
         try testing.expect(try testInfixExpression(allocator, infix_expr.expression(), infix_test.left_value, infix_test.operator, infix_test.right_value));
     }
 }
@@ -947,7 +947,7 @@ test "test boolean expression" {
         const stmt = program.statements.items[0];
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(stmt.ptr));
 
-        const boolean_exp: *ast.Boolean = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+        const boolean_exp: *ast.Boolean = @ptrCast(@alignCast(exp_stmt.expression.ptr));
         try testing.expect(boolean_exp.value == boolean_test.expected);
     }
 }
@@ -971,13 +971,13 @@ test "test if expression" {
 
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
 
-    const if_exp: *ast.IfExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const if_exp: *ast.IfExpression = @ptrCast(@alignCast(exp_stmt.expression.ptr));
 
     try testing.expect(try testInfixExpression(allocator, if_exp.condition.?, .{ .string = "x" }, "<", .{ .string = "y" }));
     try testing.expect(if_exp.consequence.?.statements.items.len == 1);
 
     const consequence_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.consequence.?.statements.items[0].ptr));
-    try testing.expect(testIdentifier(consequence_stmt.expression.?, "x"));
+    try testing.expect(testIdentifier(consequence_stmt.expression, "x"));
 
     try testing.expect(if_exp.alternative == null);
 }
@@ -1001,18 +1001,18 @@ test "test if else expression" {
 
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
 
-    const if_exp: *ast.IfExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const if_exp: *ast.IfExpression = @ptrCast(@alignCast(exp_stmt.expression.ptr));
 
     try testing.expect(try testInfixExpression(allocator, if_exp.condition.?, .{ .string = "x" }, "<", .{ .string = "y" }));
     try testing.expect(if_exp.consequence.?.statements.items.len == 1);
 
     const consequence_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.consequence.?.statements.items[0].ptr));
-    try testing.expect(testIdentifier(consequence_stmt.expression.?, "x"));
+    try testing.expect(testIdentifier(consequence_stmt.expression, "x"));
 
     try testing.expect(if_exp.alternative.?.statements.items.len == 1);
 
     const alternative_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.alternative.?.statements.items[0].ptr));
-    try testing.expect(testIdentifier(alternative_stmt.expression.?, "y"));
+    try testing.expect(testIdentifier(alternative_stmt.expression, "y"));
 }
 
 test "test function literal parsing" {
@@ -1034,7 +1034,7 @@ test "test function literal parsing" {
 
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
 
-    const func_literal: *ast.FunctionLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const func_literal: *ast.FunctionLiteral = @ptrCast(@alignCast(exp_stmt.expression.ptr));
     try testing.expect(func_literal.parameters.items.len == 2);
 
     try testing.expect(try testLiteralExpression(allocator, func_literal.parameters.items[0].expression(), .{ .string = "x" }));
@@ -1043,7 +1043,7 @@ test "test function literal parsing" {
     try testing.expect(func_literal.body.?.statements.items.len == 1);
 
     const body_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(func_literal.body.?.statements.items[0].ptr));
-    try testing.expect(try testInfixExpression(allocator, body_stmt.expression.?, .{ .string = "x" }, "+", .{ .string = "y" }));
+    try testing.expect(try testInfixExpression(allocator, body_stmt.expression, .{ .string = "x" }, "+", .{ .string = "y" }));
 }
 
 test "test function parameter parsing" {
@@ -1070,7 +1070,7 @@ test "test function parameter parsing" {
         checkParserErrors(p);
 
         const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
-        const func_literal: *ast.FunctionLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+        const func_literal: *ast.FunctionLiteral = @ptrCast(@alignCast(exp_stmt.expression.ptr));
 
         try testing.expect(func_literal.parameters.items.len == param_test.expected_params.len);
         for (func_literal.parameters.items, 0..) |param, index| {
@@ -1099,7 +1099,7 @@ test "test call expression parsing" {
 
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
 
-    const call_exp: *ast.CallExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const call_exp: *ast.CallExpression = @ptrCast(@alignCast(exp_stmt.expression.ptr));
     try testing.expect(testIdentifier(call_exp.function, "add"));
 
     try testing.expect(call_exp.arguments.items.len == 3);
@@ -1128,7 +1128,7 @@ test "test array literals parsing" {
 
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
 
-    const array_literal: *ast.ArrayLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const array_literal: *ast.ArrayLiteral = @ptrCast(@alignCast(exp_stmt.expression.ptr));
     try testing.expect(array_literal.elements.items.len == 3);
 
     try testing.expect(try testLiteralExpression(allocator, array_literal.elements.items[0], .{ .integer = 1 }));
@@ -1155,7 +1155,7 @@ test "test parsing index expression" {
 
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
 
-    const index_exp: *ast.IndexExpression = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const index_exp: *ast.IndexExpression = @ptrCast(@alignCast(exp_stmt.expression.ptr));
     try testing.expect(testIdentifier(index_exp.left, "myArray"));
     try testing.expect(try testInfixExpression(allocator, index_exp.index.?, .{ .integer = 1 }, "+", .{ .integer = 1 }));
 }
@@ -1181,7 +1181,7 @@ test "test parsing hash literals string keys" {
 
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
 
-    const hash_literal: *ast.HashLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const hash_literal: *ast.HashLiteral = @ptrCast(@alignCast(exp_stmt.expression.ptr));
 
     var expected = std.StringHashMap(i64).init(allocator);
     defer expected.deinit();
@@ -1226,7 +1226,7 @@ test "test parsing empty hash literals" {
 
     const exp_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(program.statements.items[0].ptr));
 
-    const hash_literal: *ast.HashLiteral = @ptrCast(@alignCast(exp_stmt.expression.?.ptr));
+    const hash_literal: *ast.HashLiteral = @ptrCast(@alignCast(exp_stmt.expression.ptr));
     try testing.expect(hash_literal.pairs.count() == 0);
 }
 // test "test parsing hash literals with expressions" {

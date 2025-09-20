@@ -53,7 +53,7 @@ pub const Evaluator = struct {
             },
             .ExpressionStatement => {
                 const expr_stmt_node: *ast.ExpressionStatement = @ptrCast(@alignCast(node.ptr));
-                return try self.eval(expr_stmt_node.expression.?.node, env);
+                return try self.eval(expr_stmt_node.expression.node, env);
             },
             .ReturnStatement => {
                 const return_node: *ast.ReturnStatement = @ptrCast(@alignCast(node.ptr));
