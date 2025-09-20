@@ -186,7 +186,6 @@ pub const Hashable = union(enum) {
 
 pub const Integer = struct {
     allocator: std.mem.Allocator,
-    type: ObjectType,
     value: i64,
     is_ident: bool,
 
@@ -194,7 +193,6 @@ pub const Integer = struct {
         const int_obj = try allocator.create(Integer);
         int_obj.* = .{
             .allocator = allocator,
-            .type = ObjectType.integer,
             .value = value,
             .is_ident = false,
         };
@@ -205,8 +203,8 @@ pub const Integer = struct {
         return std.fmt.allocPrint(allocator, "{d}", .{self.value});
     }
 
-    pub fn getType(self: *Integer) ObjectType {
-        return self.type;
+    pub fn getType(_: *Integer) ObjectType {
+        return ObjectType.integer;
     }
 
     pub fn deinit(self: *Integer) void {
@@ -229,13 +227,12 @@ pub const Integer = struct {
 
     pub fn hashKey(self: *Integer) HashKey {
         const value: u64 = @intCast(self.value);
-        return HashKey.init(value, self.type);
+        return HashKey.init(value, ObjectType.integer);
     }
 };
 
 pub const String = struct {
     allocator: std.mem.Allocator,
-    type: ObjectType,
     value: []const u8,
     is_ident: bool,
 
@@ -244,7 +241,6 @@ pub const String = struct {
         const str_obj = try allocator.create(String);
         str_obj.* = .{
             .allocator = allocator,
-            .type = ObjectType.string,
             .value = str_value,
             .is_ident = false,
         };
@@ -255,8 +251,8 @@ pub const String = struct {
         return std.fmt.allocPrint(allocator, "{s}", .{self.value});
     }
 
-    pub fn getType(self: *String) ObjectType {
-        return self.type;
+    pub fn getType(_: *String) ObjectType {
+        return ObjectType.string;
     }
 
     pub fn deinit(self: *String) void {
@@ -281,13 +277,12 @@ pub const String = struct {
     pub fn hashKey(self: *String) HashKey {
         var hasher = std.hash.Fnv1a_64.init();
         hasher.update(self.value);
-        return HashKey.init(hasher.final(), self.type);
+        return HashKey.init(hasher.final(), ObjectType.string);
     }
 };
 
 pub const Boolean = struct {
     allocator: std.mem.Allocator,
-    type: ObjectType,
     value: bool,
     is_ident: bool,
 
@@ -295,7 +290,6 @@ pub const Boolean = struct {
         const bool_obj = try allocator.create(Boolean);
         bool_obj.* = .{
             .allocator = allocator,
-            .type = ObjectType.boolean,
             .value = value,
             .is_ident = false,
         };
@@ -306,8 +300,8 @@ pub const Boolean = struct {
         return std.fmt.allocPrint(allocator, "{any}", .{self.value});
     }
 
-    pub fn getType(self: *Boolean) ObjectType {
-        return self.type;
+    pub fn getType(_: *Boolean) ObjectType {
+        return ObjectType.boolean;
     }
 
     pub fn deinit(self: *Boolean) void {
@@ -333,20 +327,18 @@ pub const Boolean = struct {
         if (self.value) {
             value = 1;
         }
-        return HashKey.init(@as(u64, value), self.type);
+        return HashKey.init(@as(u64, value), ObjectType.boolean);
     }
 };
 
 pub const Null = struct {
     allocator: std.mem.Allocator,
-    type: ObjectType,
     is_ident: bool,
 
     pub fn init(allocator: std.mem.Allocator) !*Null {
         const null_obj = try allocator.create(Null);
         null_obj.* = .{
             .allocator = allocator,
-            .type = ObjectType.null,
             .is_ident = false,
         };
         return null_obj;
@@ -356,8 +348,8 @@ pub const Null = struct {
         return "null";
     }
 
-    pub fn getType(self: *Null) ObjectType {
-        return self.type;
+    pub fn getType(_: *Null) ObjectType {
+        return ObjectType.null;
     }
 
     pub fn deinit(self: *Null) void {
@@ -381,7 +373,6 @@ pub const Null = struct {
 
 pub const Error = struct {
     allocator: std.mem.Allocator,
-    type: ObjectType,
     message: []const u8,
 
     pub fn init(allocator: std.mem.Allocator, comptime format: []const u8, args: anytype) !*Error {
@@ -389,7 +380,6 @@ pub const Error = struct {
         const error_obj = try allocator.create(Error);
         error_obj.* = .{
             .allocator = allocator,
-            .type = ObjectType.error_obj,
             .message = error_message,
         };
         return error_obj;
@@ -399,8 +389,8 @@ pub const Error = struct {
         return std.fmt.allocPrint(allocator, "ERROR: {s}", .{self.message});
     }
 
-    pub fn getType(self: *Error) ObjectType {
-        return self.type;
+    pub fn getType(_: *Error) ObjectType {
+        return ObjectType.error_obj;
     }
 
     pub fn deinit(self: *Error) void {
@@ -425,7 +415,6 @@ pub const Error = struct {
 
 pub const Return = struct {
     allocator: std.mem.Allocator,
-    type: ObjectType,
     value: ?Object,
     is_ident: bool,
 
@@ -433,7 +422,6 @@ pub const Return = struct {
         const return_obj = try allocator.create(Return);
         return_obj.* = .{
             .allocator = allocator,
-            .type = ObjectType.return_obj,
             .value = value,
             .is_ident = false,
         };
@@ -444,8 +432,8 @@ pub const Return = struct {
         return self.value.?.inspect(allocator);
     }
 
-    pub fn getType(self: *Return) ObjectType {
-        return self.type;
+    pub fn getType(_: *Return) ObjectType {
+        return ObjectType.return_obj;
     }
 
     pub fn deinit(self: *Return) void {
@@ -472,7 +460,6 @@ pub const Return = struct {
 
 pub const Function = struct {
     allocator: std.mem.Allocator,
-    type: ObjectType,
     parameters: []*ast.Identifier,
     body: *ast.BlockStatement,
     env: *Environment,
@@ -483,7 +470,6 @@ pub const Function = struct {
         const func = try allocator.create(Function);
         func.* = .{
             .allocator = allocator,
-            .type = ObjectType.function_obj,
             .parameters = parameters,
             .body = body,
             .env = env,
@@ -493,8 +479,8 @@ pub const Function = struct {
         return func;
     }
 
-    pub fn getType(self: *Function) ObjectType {
-        return self.type;
+    pub fn getType(_: *Function) ObjectType {
+        return ObjectType.function_obj;
     }
 
     pub fn deinit(self: *Function) void {
@@ -538,7 +524,6 @@ pub const BuiltinFn = *const fn (allocator: std.mem.Allocator, args: []Object) O
 
 pub const Builtin = struct {
     allocator: std.mem.Allocator,
-    type: ObjectType,
     func: BuiltinFn,
     is_ident: bool,
 
@@ -546,7 +531,6 @@ pub const Builtin = struct {
         const builtin = try allocator.create(Builtin);
         builtin.* = .{
             .allocator = allocator,
-            .type = ObjectType.builtin_obj,
             .func = func,
             .is_ident = false,
         };
@@ -557,8 +541,8 @@ pub const Builtin = struct {
         return "builtin";
     }
 
-    pub fn getType(self: *Builtin) ObjectType {
-        return self.type;
+    pub fn getType(_: *Builtin) ObjectType {
+        return ObjectType.builtin_obj;
     }
 
     pub fn deinit(self: *Builtin) void {
@@ -582,7 +566,6 @@ pub const Builtin = struct {
 
 pub const Array = struct {
     allocator: std.mem.Allocator,
-    type: ObjectType,
     elements: []Object,
     is_ident: bool,
 
@@ -594,7 +577,6 @@ pub const Array = struct {
         const array_obj = try allocator.create(Array);
         array_obj.* = .{
             .allocator = allocator,
-            .type = ObjectType.array_obj,
             .elements = arr_elements,
             .is_ident = false,
         };
@@ -613,8 +595,8 @@ pub const Array = struct {
         return result;
     }
 
-    pub fn getType(self: *Array) ObjectType {
-        return self.type;
+    pub fn getType(_: *Array) ObjectType {
+        return ObjectType.array_obj;
     }
 
     pub fn deinit(self: *Array) void {
@@ -645,7 +627,6 @@ pub const HashPair = struct {
 pub const Hash = struct {
     allocator: std.mem.Allocator,
     pairs: std.AutoHashMap(HashKey, HashPair),
-    type: ObjectType,
     is_ident: bool,
 
     pub fn init(allocator: std.mem.Allocator) !*Hash {
@@ -653,7 +634,6 @@ pub const Hash = struct {
         hash.* = .{
             .allocator = allocator,
             .pairs = std.AutoHashMap(HashKey, HashPair).init(allocator),
-            .type = ObjectType.hash_obj,
             .is_ident = false,
         };
         return hash;
@@ -685,8 +665,8 @@ pub const Hash = struct {
         return result.toOwnedSlice();
     }
 
-    pub fn getType(self: *Hash) ObjectType {
-        return self.type;
+    pub fn getType(_: *Hash) ObjectType {
+        return ObjectType.hash_obj;
     }
 
     pub fn deinit(self: *Hash) void {
