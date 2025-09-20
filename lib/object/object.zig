@@ -18,12 +18,14 @@ pub const HashKey = struct {
 };
 
 pub const Environment = struct {
+    allocator: std.mem.Allocator,
     store: std.StringHashMap(Object),
     outer: ?*Environment,
 
     pub fn init(allocator: std.mem.Allocator) !*Environment {
         const env = try allocator.create(Environment);
         env.* = .{
+            .allocator = allocator,
             .store = std.StringHashMap(Object).init(allocator),
             .outer = null,
         };
@@ -36,9 +38,9 @@ pub const Environment = struct {
         return env;
     }
 
-    pub fn deinit(self: *Environment, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *Environment) void {
         self.store.deinit();
-        allocator.destroy(self);
+        self.allocator.destroy(self);
     }
 
     pub fn get(self: *Environment, key: []const u8) ?Object {
@@ -497,7 +499,7 @@ pub const Function = struct {
 
     pub fn deinit(self: *Function) void {
         if (self.extended_env) |ext_env| {
-            ext_env.deinit(self.allocator);
+            ext_env.deinit();
         }
         self.allocator.destroy(self);
     }

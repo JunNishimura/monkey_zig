@@ -505,7 +505,7 @@ pub const Evaluator = struct {
                     const func_obj: *Function = @ptrCast(@alignCast(evaluated.?.ptr));
                     func_obj.extended_env = extended_env;
                 } else {
-                    extended_env.deinit(self.allocator);
+                    extended_env.deinit();
                 }
 
                 return unwrapReturnValue(evaluated);
@@ -727,7 +727,7 @@ test "eval integer expression" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -763,7 +763,7 @@ test "eval string expression" {
     defer program.deinit();
 
     const env = try Environment.init(allocator);
-    defer env.deinit(allocator);
+    defer env.deinit();
 
     const evaluator = try Evaluator.init(allocator);
     defer evaluator.deinit();
@@ -788,7 +788,7 @@ test "eval string concatenation" {
     defer program.deinit();
 
     const env = try Environment.init(allocator);
-    defer env.deinit(allocator);
+    defer env.deinit();
 
     const evaluator = try Evaluator.init(allocator);
     defer evaluator.deinit();
@@ -837,7 +837,7 @@ test "eval boolean expression" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -882,7 +882,7 @@ test "test bang operator" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -918,7 +918,7 @@ test "test if-else expressions" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -963,7 +963,7 @@ test "test return statements" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -1002,7 +1002,7 @@ test "test error handling" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -1041,7 +1041,7 @@ test "test let statements" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -1066,7 +1066,7 @@ test "test function object" {
     defer program.deinit();
 
     const env = try Environment.init(allocator);
-    defer env.deinit(allocator);
+    defer env.deinit();
 
     const evaluator = try Evaluator.init(allocator);
     defer evaluator.deinit();
@@ -1109,7 +1109,7 @@ test "test function application" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -1148,7 +1148,7 @@ test "test builtin functions" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -1186,7 +1186,7 @@ test "test array literals" {
     defer program.deinit();
 
     const env = try Environment.init(allocator);
-    defer env.deinit(allocator);
+    defer env.deinit();
 
     const evaluator = try Evaluator.init(allocator);
     defer evaluator.deinit();
@@ -1233,7 +1233,7 @@ test "test array index expressions" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();
@@ -1295,7 +1295,7 @@ test "test hash literals" {
     defer program.deinit();
 
     const env = try Environment.init(allocator);
-    defer env.deinit(allocator);
+    defer env.deinit();
 
     const evaluator = try Evaluator.init(allocator);
     defer evaluator.deinit();
@@ -1337,7 +1337,7 @@ test "test hash index expressions" {
         defer program.deinit();
 
         const env = try Environment.init(allocator);
-        defer env.deinit(allocator);
+        defer env.deinit();
 
         const evaluator = try Evaluator.init(allocator);
         defer evaluator.deinit();

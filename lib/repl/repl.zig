@@ -13,7 +13,7 @@ pub fn start(
     const stdin = std.io.getStdIn().reader();
     const stdout = std.io.getStdOut().writer();
     const env = try Environment.init(allocator);
-    defer env.deinit(allocator);
+    defer env.deinit();
 
     const evaluator = try Evaluator.init(allocator);
     defer evaluator.deinit();
