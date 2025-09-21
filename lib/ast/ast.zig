@@ -411,7 +411,7 @@ pub const PrefixExpression = struct {
     allocator: std.mem.Allocator,
     token: Token,
     operator: []const u8,
-    right: ?Expression,
+    right: Expression,
     str_list: std.ArrayList(u8),
 
     fn expressionNode(_: *PrefixExpression) void {}
@@ -427,23 +427,18 @@ pub const PrefixExpression = struct {
     pub fn string(self: *PrefixExpression) ![]const u8 {
         try self.str_list.appendSlice("(");
         try self.str_list.appendSlice(self.operator);
-
-        if (self.right) |r| {
-            const right_str = try r.string();
-            try self.str_list.appendSlice(right_str);
-        }
-
+        try self.str_list.appendSlice(try self.right.string());
         try self.str_list.appendSlice(")");
         return self.str_list.items;
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token, operator: []const u8) !*PrefixExpression {
+    pub fn init(allocator: std.mem.Allocator, token: Token, operator: []const u8, right: Expression) !*PrefixExpression {
         const prefix_exp = try allocator.create(PrefixExpression);
         prefix_exp.* = .{
             .allocator = allocator,
             .token = token,
             .operator = operator,
-            .right = null,
+            .right = right,
             .str_list = std.ArrayList(u8).init(allocator),
         };
         return prefix_exp;
@@ -451,9 +446,7 @@ pub const PrefixExpression = struct {
 
     pub fn deinit(self: *PrefixExpression) void {
         self.str_list.deinit();
-        if (self.right) |r| {
-            r.deinit();
-        }
+        self.right.deinit();
         self.allocator.destroy(self);
     }
 
@@ -467,7 +460,7 @@ pub const InfixExpression = struct {
     token: Token,
     left: Expression,
     operator: []const u8,
-    right: ?Expression,
+    right: Expression,
     str_list: std.ArrayList(u8),
 
     fn expressionNode(_: *InfixExpression) void {}
@@ -486,10 +479,7 @@ pub const InfixExpression = struct {
         try self.str_list.appendSlice(" ");
         try self.str_list.appendSlice(self.operator);
         try self.str_list.appendSlice(" ");
-        if (self.right) |r| {
-            const right_str = try r.string();
-            try self.str_list.appendSlice(right_str);
-        }
+        try self.str_list.appendSlice(try self.right.string());
         try self.str_list.appendSlice(")");
         return self.str_list.items;
     }
@@ -498,14 +488,14 @@ pub const InfixExpression = struct {
         return Expression.init(self);
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token, operator: []const u8, left: Expression) !*InfixExpression {
+    pub fn init(allocator: std.mem.Allocator, token: Token, operator: []const u8, left: Expression, right: Expression) !*InfixExpression {
         const infix_exp = try allocator.create(InfixExpression);
         infix_exp.* = .{
             .allocator = allocator,
             .token = token,
             .left = left,
             .operator = operator,
-            .right = null,
+            .right = right,
             .str_list = std.ArrayList(u8).init(allocator),
         };
         return infix_exp;
@@ -514,9 +504,7 @@ pub const InfixExpression = struct {
     pub fn deinit(self: *InfixExpression) void {
         self.str_list.deinit();
         self.left.deinit();
-        if (self.right) |r| {
-            r.deinit();
-        }
+        self.right.deinit();
         self.allocator.destroy(self);
     }
 };
@@ -524,8 +512,8 @@ pub const InfixExpression = struct {
 pub const IfExpression = struct {
     allocator: std.mem.Allocator,
     token: Token,
-    condition: ?Expression,
-    consequence: ?*BlockStatement,
+    condition: Expression,
+    consequence: *BlockStatement,
     alternative: ?*BlockStatement,
     str_list: std.ArrayList(u8),
 
@@ -541,9 +529,9 @@ pub const IfExpression = struct {
 
     fn string(self: *IfExpression) ![]const u8 {
         try self.str_list.appendSlice("if");
-        try self.str_list.appendSlice(try self.condition.?.string());
+        try self.str_list.appendSlice(try self.condition.string());
         try self.str_list.appendSlice(" ");
-        try self.str_list.appendSlice(try self.consequence.?.string());
+        try self.str_list.appendSlice(try self.consequence.string());
 
         if (self.alternative) |alt| {
             try self.str_list.appendSlice("else ");
@@ -553,14 +541,14 @@ pub const IfExpression = struct {
         return self.str_list.items;
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token) !*IfExpression {
+    pub fn init(allocator: std.mem.Allocator, token: Token, condition: Expression, consequence: *BlockStatement, alternative: ?*BlockStatement) !*IfExpression {
         const if_exp = try allocator.create(IfExpression);
         if_exp.* = .{
             .allocator = allocator,
             .token = token,
-            .condition = null,
-            .consequence = null,
-            .alternative = null,
+            .condition = condition,
+            .consequence = consequence,
+            .alternative = alternative,
             .str_list = std.ArrayList(u8).init(allocator),
         };
         return if_exp;
@@ -568,12 +556,8 @@ pub const IfExpression = struct {
 
     pub fn deinit(self: *IfExpression) void {
         self.str_list.deinit();
-        if (self.condition) |cond| {
-            cond.deinit();
-        }
-        if (self.consequence) |cons| {
-            cons.deinit();
-        }
+        self.condition.deinit();
+        self.consequence.deinit();
         if (self.alternative) |alt| {
             alt.deinit();
         }
@@ -741,7 +725,7 @@ pub const FunctionLiteral = struct {
     allocator: std.mem.Allocator,
     token: Token,
     parameters: std.ArrayList(*Identifier),
-    body: ?*BlockStatement,
+    body: *BlockStatement,
     str_list: std.ArrayList(u8),
 
     fn expressionNode(_: *FunctionLiteral) void {}
@@ -764,17 +748,17 @@ pub const FunctionLiteral = struct {
             try self.str_list.appendSlice(try param.string());
         }
         try self.str_list.appendSlice(") ");
-        try self.str_list.appendSlice(try self.body.?.string());
+        try self.str_list.appendSlice(try self.body.string());
         return self.str_list.items;
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token) !*FunctionLiteral {
+    pub fn init(allocator: std.mem.Allocator, token: Token, parameters: std.ArrayList(*Identifier), body: *BlockStatement) !*FunctionLiteral {
         const lit = try allocator.create(FunctionLiteral);
         lit.* = .{
             .allocator = allocator,
             .token = token,
-            .parameters = std.ArrayList(*Identifier).init(allocator),
-            .body = null,
+            .parameters = parameters,
+            .body = body,
             .str_list = std.ArrayList(u8).init(allocator),
         };
         return lit;
@@ -786,9 +770,7 @@ pub const FunctionLiteral = struct {
             param.deinit();
         }
         self.parameters.deinit();
-        if (self.body) |body| {
-            body.deinit();
-        }
+        self.body.deinit();
         self.allocator.destroy(self);
     }
 
@@ -828,13 +810,13 @@ pub const CallExpression = struct {
         return self.str_list.items;
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token, function: Expression) !*CallExpression {
+    pub fn init(allocator: std.mem.Allocator, token: Token, function: Expression, args: std.ArrayList(Expression)) !*CallExpression {
         const call_exp = try allocator.create(CallExpression);
         call_exp.* = .{
             .allocator = allocator,
             .token = token,
             .function = function,
-            .arguments = std.ArrayList(Expression).init(allocator),
+            .arguments = args,
             .str_list = std.ArrayList(u8).init(allocator),
         };
         return call_exp;
@@ -884,12 +866,12 @@ pub const ArrayLiteral = struct {
         return self.str_list.items;
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token) !*ArrayLiteral {
+    pub fn init(allocator: std.mem.Allocator, token: Token, elements: std.ArrayList(Expression)) !*ArrayLiteral {
         const array_lit = try allocator.create(ArrayLiteral);
         array_lit.* = .{
             .allocator = allocator,
             .token = token,
-            .elements = std.ArrayList(Expression).init(allocator),
+            .elements = elements,
             .str_list = std.ArrayList(u8).init(allocator),
         };
         return array_lit;
@@ -913,7 +895,7 @@ pub const IndexExpression = struct {
     allocator: std.mem.Allocator,
     token: Token,
     left: Expression,
-    index: ?Expression,
+    index: Expression,
     str_list: std.ArrayList(u8),
 
     fn expressionNode(_: *IndexExpression) void {}
@@ -930,19 +912,19 @@ pub const IndexExpression = struct {
         try self.str_list.appendSlice("(");
         try self.str_list.appendSlice(try self.left.string());
         try self.str_list.appendSlice("[");
-        try self.str_list.appendSlice(try self.index.?.string());
+        try self.str_list.appendSlice(try self.index.string());
         try self.str_list.appendSlice("])");
 
         return self.str_list.items;
     }
 
-    pub fn init(allocator: std.mem.Allocator, token: Token, left: Expression) !*IndexExpression {
+    pub fn init(allocator: std.mem.Allocator, token: Token, left: Expression, index: Expression) !*IndexExpression {
         const index_exp = try allocator.create(IndexExpression);
         index_exp.* = .{
             .allocator = allocator,
             .token = token,
             .left = left,
-            .index = null,
+            .index = index,
             .str_list = std.ArrayList(u8).init(allocator),
         };
         return index_exp;
@@ -951,9 +933,7 @@ pub const IndexExpression = struct {
     fn deinit(self: *IndexExpression) void {
         self.str_list.deinit();
         self.left.deinit();
-        if (self.index) |idx| {
-            idx.deinit();
-        }
+        self.index.deinit();
         self.allocator.destroy(self);
     }
 

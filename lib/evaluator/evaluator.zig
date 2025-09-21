@@ -77,7 +77,7 @@ pub const Evaluator = struct {
             .FunctionLiteral => {
                 const func_node: *ast.FunctionLiteral = @ptrCast(@alignCast(node.ptr));
                 const params = func_node.parameters.items;
-                const body = func_node.body.?;
+                const body = func_node.body;
                 return (try Function.init(self.allocator, params, body, env)).object();
             },
             .CallExpression => {
@@ -105,7 +105,7 @@ pub const Evaluator = struct {
                 const left = try self.eval(infix_node.left.node, env);
                 if (left) |l| {
                     try self.addEvaluated(l);
-                    const right = try self.eval(infix_node.right.?.node, env);
+                    const right = try self.eval(infix_node.right.node, env);
                     if (right) |r| {
                         try self.addEvaluated(r);
                         return try self.evalInfixExpression(infix_node.operator, l, r);
@@ -115,7 +115,7 @@ pub const Evaluator = struct {
             },
             .PrefixExpression => {
                 const prefix_node: *ast.PrefixExpression = @ptrCast(@alignCast(node.ptr));
-                const right = try self.eval(prefix_node.right.?.node, env);
+                const right = try self.eval(prefix_node.right.node, env);
                 if (right) |r| {
                     try self.addEvaluated(r);
                     return try self.evalPrefixExpression(prefix_node.operator, r);
@@ -159,7 +159,7 @@ pub const Evaluator = struct {
                         return l;
                     }
                     try self.addEvaluated(l);
-                    const index = try self.eval(index_node.index.?.node, env);
+                    const index = try self.eval(index_node.index.node, env);
                     if (index) |i| {
                         if (i.isError()) {
                             return i;
@@ -223,7 +223,7 @@ pub const Evaluator = struct {
     fn evalIfExpression(self: *Evaluator, node: ast.Node, env: *Environment) EvalError!?obj.Object {
         const if_node: *ast.IfExpression = @ptrCast(@alignCast(node.ptr));
 
-        const cond_obj = try self.eval(if_node.condition.?.node, env);
+        const cond_obj = try self.eval(if_node.condition.node, env);
         if (cond_obj) |cond| {
             try self.addEvaluated(cond);
 
@@ -231,7 +231,7 @@ pub const Evaluator = struct {
                 return cond;
             }
             if (isTruthy(cond)) {
-                return try self.eval(if_node.consequence.?.statement().node, env);
+                return try self.eval(if_node.consequence.statement().node, env);
             } else if (if_node.alternative) |alt| {
                 return try self.eval(alt.statement().node, env);
             }

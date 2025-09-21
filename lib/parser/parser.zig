@@ -249,13 +249,13 @@ pub const Parser = struct {
     }
 
     fn parsePrefixExpression(self: *Parser) !?ast.Expression {
-        const prefix_exp = try ast.PrefixExpression.init(self.allocator, self.cur_token, self.cur_token.literal);
+        const cur_token = self.cur_token;
 
         self.nextToken();
 
-        prefix_exp.right = try self.parseExpression(.Prefix);
+        const right = try self.parseExpression(.Prefix);
 
-        return prefix_exp.expression();
+        return (try ast.PrefixExpression.init(self.allocator, cur_token, cur_token.literal, right.?)).expression();
     }
 
     fn parseGroupExpression(self: *Parser) !?ast.Expression {
@@ -271,14 +271,14 @@ pub const Parser = struct {
     }
 
     fn parseIfExpression(self: *Parser) !?ast.Expression {
-        const if_exp = try ast.IfExpression.init(self.allocator, self.cur_token);
+        const if_cur_token = self.cur_token;
 
         if (!(try self.expectPeek(.LParen))) {
             return null;
         }
 
         self.nextToken();
-        if_exp.condition = try self.parseExpression(.Lowest);
+        const condition = try self.parseExpression(.Lowest);
 
         if (!(try self.expectPeek(.RParen))) {
             return null;
@@ -288,8 +288,9 @@ pub const Parser = struct {
             return null;
         }
 
-        if_exp.consequence = try self.parseBlockStatement();
+        const consequence = try self.parseBlockStatement();
 
+        var alternative: ?*ast.BlockStatement = null;
         if (self.peekTokenIs(.Else)) {
             self.nextToken();
 
@@ -297,10 +298,16 @@ pub const Parser = struct {
                 return null;
             }
 
-            if_exp.alternative = try self.parseBlockStatement();
+            alternative = try self.parseBlockStatement();
         }
 
-        return if_exp.expression();
+        return (try ast.IfExpression.init(
+            self.allocator,
+            if_cur_token,
+            condition.?,
+            consequence,
+            alternative,
+        )).expression();
     }
 
     fn parseFunctionParameters(self: *Parser) !?std.ArrayList(*ast.Identifier) {
@@ -332,15 +339,14 @@ pub const Parser = struct {
     }
 
     fn parseFunctionLiteral(self: *Parser) !?ast.Expression {
-        const func_literal = try ast.FunctionLiteral.init(self.allocator, self.cur_token);
+        const func_cur_token = self.cur_token;
 
         if (!(try self.expectPeek(.LParen))) {
             return null;
         }
 
-        if (try self.parseFunctionParameters()) |params| {
-            func_literal.parameters = params;
-        } else {
+        const params = try self.parseFunctionParameters();
+        if (params == null) {
             return null;
         }
 
@@ -348,21 +354,29 @@ pub const Parser = struct {
             return null;
         }
 
-        func_literal.body = try self.parseBlockStatement();
+        const body = try self.parseBlockStatement();
 
-        return func_literal.expression();
+        return (try ast.FunctionLiteral.init(
+            self.allocator,
+            func_cur_token,
+            params.?,
+            body,
+        )).expression();
     }
 
     fn parseArrayLiteral(self: *Parser) !?ast.Expression {
-        const array_lit = try ast.ArrayLiteral.init(self.allocator, self.cur_token);
+        const array_cur_token = self.cur_token;
 
-        if (try self.parseExpressionList(.RBracket)) |elements| {
-            array_lit.elements = elements;
-        } else {
+        const elements = try self.parseExpressionList(.RBracket);
+        if (elements == null) {
             return null;
         }
 
-        return array_lit.expression();
+        return (try ast.ArrayLiteral.init(
+            self.allocator,
+            array_cur_token,
+            elements.?,
+        )).expression();
     }
 
     fn parseExpressionList(self: *Parser, end: tok.TokenType) !?std.ArrayList(ast.Expression) {
@@ -434,42 +448,51 @@ pub const Parser = struct {
     }
 
     fn parseInfixExpression(self: *Parser, left: ast.Expression) !?ast.Expression {
-        const infix_exp = try ast.InfixExpression.init(
-            self.allocator,
-            self.cur_token,
-            self.cur_token.literal,
-            left,
-        );
+        const infix_cur_token = self.cur_token;
 
         const precedence = self.curPrecedence();
         self.nextToken();
-        infix_exp.right = try self.parseExpression(precedence);
+        const right = try self.parseExpression(precedence);
 
-        return infix_exp.expression();
+        return (try ast.InfixExpression.init(
+            self.allocator,
+            infix_cur_token,
+            infix_cur_token.literal,
+            left,
+            right.?,
+        )).expression();
     }
 
     fn parseCallExpression(self: *Parser, function: ast.Expression) !?ast.Expression {
-        const exp = try ast.CallExpression.init(self.allocator, self.cur_token, function);
+        const call_cur_token = self.cur_token;
         if (try self.parseExpressionList(.RParen)) |args| {
-            exp.arguments = args;
-        } else {
-            return null;
+            return (try ast.CallExpression.init(
+                self.allocator,
+                call_cur_token,
+                function,
+                args,
+            )).expression();
         }
-        return exp.expression();
+        return null;
     }
 
     fn parseIndexExpression(self: *Parser, left: ast.Expression) !?ast.Expression {
-        const index_exp = try ast.IndexExpression.init(self.allocator, self.cur_token, left);
+        const index_cur_token = self.cur_token;
 
         self.nextToken();
 
-        index_exp.index = try self.parseExpression(.Lowest);
+        const index = try self.parseExpression(.Lowest);
 
         if (!(try self.expectPeek(.RBracket))) {
             return null;
         }
 
-        return index_exp.expression();
+        return (try ast.IndexExpression.init(
+            self.allocator,
+            index_cur_token,
+            left,
+            index.?,
+        )).expression();
     }
 
     fn parseStatement(self: *Parser) !?ast.Statement {
@@ -896,7 +919,7 @@ fn testPrefixExpression(allocator: std.mem.Allocator, exp: ast.Expression, opera
         return false;
     }
 
-    if (!(try testLiteralExpression(allocator, prefix_exp.right.?, right))) {
+    if (!(try testLiteralExpression(allocator, prefix_exp.right, right))) {
         return false;
     }
 
@@ -914,7 +937,7 @@ fn testInfixExpression(allocator: std.mem.Allocator, exp: ast.Expression, left: 
         return false;
     }
 
-    if (!(try testLiteralExpression(allocator, infix_exp.right.?, right))) {
+    if (!(try testLiteralExpression(allocator, infix_exp.right, right))) {
         return false;
     }
 
@@ -972,10 +995,10 @@ test "test if expression" {
 
     const if_exp: *ast.IfExpression = @ptrCast(@alignCast(exp_stmt.expression.ptr));
 
-    try testing.expect(try testInfixExpression(allocator, if_exp.condition.?, .{ .string = "x" }, "<", .{ .string = "y" }));
-    try testing.expect(if_exp.consequence.?.statements.items.len == 1);
+    try testing.expect(try testInfixExpression(allocator, if_exp.condition, .{ .string = "x" }, "<", .{ .string = "y" }));
+    try testing.expect(if_exp.consequence.statements.items.len == 1);
 
-    const consequence_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.consequence.?.statements.items[0].ptr));
+    const consequence_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.consequence.statements.items[0].ptr));
     try testing.expect(testIdentifier(consequence_stmt.expression, "x"));
 
     try testing.expect(if_exp.alternative == null);
@@ -1002,10 +1025,10 @@ test "test if else expression" {
 
     const if_exp: *ast.IfExpression = @ptrCast(@alignCast(exp_stmt.expression.ptr));
 
-    try testing.expect(try testInfixExpression(allocator, if_exp.condition.?, .{ .string = "x" }, "<", .{ .string = "y" }));
-    try testing.expect(if_exp.consequence.?.statements.items.len == 1);
+    try testing.expect(try testInfixExpression(allocator, if_exp.condition, .{ .string = "x" }, "<", .{ .string = "y" }));
+    try testing.expect(if_exp.consequence.statements.items.len == 1);
 
-    const consequence_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.consequence.?.statements.items[0].ptr));
+    const consequence_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(if_exp.consequence.statements.items[0].ptr));
     try testing.expect(testIdentifier(consequence_stmt.expression, "x"));
 
     try testing.expect(if_exp.alternative.?.statements.items.len == 1);
@@ -1039,9 +1062,9 @@ test "test function literal parsing" {
     try testing.expect(try testLiteralExpression(allocator, func_literal.parameters.items[0].expression(), .{ .string = "x" }));
     try testing.expect(try testLiteralExpression(allocator, func_literal.parameters.items[1].expression(), .{ .string = "y" }));
 
-    try testing.expect(func_literal.body.?.statements.items.len == 1);
+    try testing.expect(func_literal.body.statements.items.len == 1);
 
-    const body_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(func_literal.body.?.statements.items[0].ptr));
+    const body_stmt: *ast.ExpressionStatement = @ptrCast(@alignCast(func_literal.body.statements.items[0].ptr));
     try testing.expect(try testInfixExpression(allocator, body_stmt.expression, .{ .string = "x" }, "+", .{ .string = "y" }));
 }
 
@@ -1156,7 +1179,7 @@ test "test parsing index expression" {
 
     const index_exp: *ast.IndexExpression = @ptrCast(@alignCast(exp_stmt.expression.ptr));
     try testing.expect(testIdentifier(index_exp.left, "myArray"));
-    try testing.expect(try testInfixExpression(allocator, index_exp.index.?, .{ .integer = 1 }, "+", .{ .integer = 1 }));
+    try testing.expect(try testInfixExpression(allocator, index_exp.index, .{ .integer = 1 }, "+", .{ .integer = 1 }));
 }
 
 test "test parsing hash literals string keys" {
